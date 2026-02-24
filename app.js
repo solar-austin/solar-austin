@@ -123,39 +123,40 @@ function update() {
 }
 
 /**
- * Runs a 24-hour August peak stress test. Supply = gas, geo, solar, wind (by hour), plus a stateful
- * battery that charges on surplus and discharges to fill deficits, smoothing the supply curve.
- * Battery: power limit = batt MW, energy capacity = 4h (batt * 4 MWh), starts at 50% SoC.
- *
- * @param {number} sol - Solar capacity (MW) in stress test
- * @param {number} win - Wind capacity (MW)
- * @param {number} geo - Geothermal (MW)
- * @param {number} gas - Local gas (MW)
- * @param {number} batt - Firm battery power (MW), 4h duration
- * @param {number} growth - Annual load growth (%)
- * @returns {{ sim: { load: number[], supply: number[] }, risk: number }}
+ * Runs a 24-hour August peak stress test. Supply = gas, geo, solar, wind (by hour), plus battery.
+ * Battery: initial SoC = total surplus (capped by E_cap). No charging; discharge only in deficit hours.
+ * Simulation runs starting at noon (12→23, then 0→11) so surplus hours come first; results are
+ * stored by hour so the chart still displays midnight→midnight.
+ * Power limit = batt MW, energy capacity = 4h (batt * 4 MWh).
  */
 function runReliability(sol, win, geo, gas, batt, growth) {
   const peak = 3150 * Math.pow(1 + growth / 100, 10);
-  const sim = { load: [], supply: [] };
-  let risk = 0;
   const E_cap = batt * 4; // MWh, 4-hour duration
-  let soc = E_cap * 0.5;  // start at 50% state of charge
 
+  // Initial SoC = total surplus over the day (no battery in this sum)
+  let totalSurplus = 0;
   for (let h = 0; h < 24; h++) {
     const l = PROF.load[h] * peak;
     const supplyNoBatt = 400 + gas + geo + sol * PROF.solar[h] + win * PROF.wind[h] * 0.2;
-    const deficit = Math.max(0, l - supplyNoBatt);
-    const surplus = Math.max(0, supplyNoBatt - l);
+    totalSurplus += Math.max(0, supplyNoBatt - l);
+  }
+  let soc = Math.min(E_cap, totalSurplus);
 
+  const sim = { load: new Array(24), supply: new Array(24), supplyNoBatt: new Array(24), discharge: new Array(24) };
+  let risk = 0;
+  // Run simulation starting at noon (solar peak), then 0..11, so surplus comes before deficit
+  for (let i = 0; i < 24; i++) {
+    const h = (12 + i) % 24;
+    const l = PROF.load[h] * peak;
+    const supplyNoBatt = 400 + gas + geo + sol * PROF.solar[h] + win * PROF.wind[h] * 0.2;
+    const deficit = Math.max(0, l - supplyNoBatt);
     const discharge = Math.min(deficit, batt, soc);
     soc -= discharge;
-    const charge = Math.min(surplus, batt, E_cap - soc);
-    soc += charge;
-
     const s = supplyNoBatt + discharge;
-    sim.load.push(l);
-    sim.supply.push(s);
+    sim.load[h] = l;
+    sim.supply[h] = s;
+    sim.supplyNoBatt[h] = supplyNoBatt;
+    sim.discharge[h] = discharge;
     if (l > s + 10) risk++;
   }
   return { sim, risk };
@@ -295,10 +296,9 @@ function drawMix(data) {
 }
 
 /**
- * Builds or updates the 24-hour reliability chart with Chart.js: supply (green area), deficit (red area), load (line).
- * Time-of-day on x-axis. Updates k_risk and risk_card.
+ * Builds or updates the 24-hour reliability chart: generation (green), battery (blue stack), deficit (red hatch), load (line).
  *
- * @param {{ sim: { load: number[], supply: number[] }, risk: number }} rel - Result from runReliability().
+ * @param {{ sim: { load, supply, supplyNoBatt, discharge }, risk: number }} rel - Result from runReliability().
  */
 function drawRel(rel) {
   const labels = Array.from({ length: 24 }, (_, i) => hourToTimeOfDay(i));
@@ -306,20 +306,32 @@ function drawRel(rel) {
 
   const datasets = [
     {
-      label: 'Supply',
-      data: rel.sim.supply,
+      label: 'Generation',
+      data: rel.sim.supplyNoBatt,
       backgroundColor: 'rgba(232, 245, 233, 1)',
-      borderColor: '#81c784',
+      borderColor: '#2e7d32',
       borderWidth: 1,
       fill: true,
       stack: 'area',
       tension: 0,
+      pointRadius: 0,
+    },
+    {
+      label: 'Battery',
+      data: rel.sim.discharge,
+      backgroundColor: 'rgba(227, 242, 253, 1)',
+      borderColor: '#0d47a1',
+      borderWidth: 1,
+      fill: true,
+      stack: 'area',
+      tension: 0,
+      pointRadius: 0,
     },
     {
       label: 'Deficit',
       data: deficit,
       backgroundColor: null, // set to hatch pattern when creating chart
-      borderColor: 'rgba(229, 115, 115, 0.9)',
+      borderColor: '#b71c1c',
       borderWidth: 0,
       fill: true,
       stack: 'area',
@@ -341,13 +353,14 @@ function drawRel(rel) {
 
   if (relChartInstance) {
     relChartInstance.data.labels = labels;
-    relChartInstance.data.datasets[0].data = rel.sim.supply;
-    relChartInstance.data.datasets[1].data = deficit;
-    relChartInstance.data.datasets[2].data = rel.sim.load;
+    relChartInstance.data.datasets[0].data = rel.sim.supplyNoBatt;
+    relChartInstance.data.datasets[1].data = rel.sim.discharge;
+    relChartInstance.data.datasets[2].data = deficit;
+    relChartInstance.data.datasets[3].data = rel.sim.load;
     relChartInstance.update('none');
   } else {
     const ctx = document.getElementById('relChart').getContext('2d');
-    datasets[1].backgroundColor = createDeficitHatchPattern(ctx);
+    datasets[2].backgroundColor = createDeficitHatchPattern(ctx);
     relChartInstance = new Chart(ctx, {
       type: 'line',
       data: { labels, datasets },
