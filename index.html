@@ -36,31 +36,31 @@
       <h4 class="input-section">Sources</h4>
       <div class="row">
         <div class="row-head">
-          <span class="swatch" style="background: #1976D2"></span>
-          <span class="lbl">New Wind (/yr)</span>
+          <span class="swatch" style="background: #4FC3F7"></span>
+          <span class="lbl">New Wind</span>
         </div>
         <div class="slider-wrap"><input type="range" id="p_wind" min="0" max="400" value="100"></div>
-        <span class="val" id="v_wind">100</span>
+        <span class="val" id="v_wind">100 MW/yr</span>
       </div>
       <div class="row">
         <div class="row-head">
-          <span class="swatch" style="background: #F57C00"></span>
-          <span class="lbl">New Solar (/yr)</span>
+          <span class="swatch" style="background: #E09328"></span>
+          <span class="lbl">New Solar</span>
         </div>
         <div class="slider-wrap"><input type="range" id="p_solar" min="0" max="400" value="150"></div>
-        <span class="val" id="v_solar">150</span>
+        <span class="val" id="v_solar">150 MW/yr</span>
       </div>
       <div class="row">
         <div class="row-head">
-          <span class="swatch" style="background: #795548"></span>
-          <span class="lbl">Geothermal (/yr)</span>
+          <span class="swatch" style="background: #A1887F"></span>
+          <span class="lbl">Geothermal</span>
         </div>
         <div class="slider-wrap"><input type="range" id="p_geo" min="0" max="400" value="50"></div>
-        <span class="val" id="v_geo">50</span>
+        <span class="val" id="v_geo">50 MW/yr</span>
       </div>
       <div class="row">
         <div class="row-head">
-          <span class="swatch" style="background: #9C27B0"></span>
+          <span class="swatch" style="background: #CE93D8"></span>
           <span class="lbl">Firm Battery (MW)</span>
         </div>
         <div class="slider-wrap"><input type="range" id="p_batt" min="0" max="2500" value="500"></div>
@@ -68,7 +68,7 @@
       </div>
       <div class="row">
         <div class="row-head">
-          <span class="swatch" style="background: #607D8B"></span>
+          <span class="swatch" style="background: #90A4AE"></span>
           <span class="lbl">Local Gas (MW)</span>
         </div>
         <div class="slider-wrap"><input type="range" id="p_gas" min="0" max="1500" value="500"></div>
@@ -86,12 +86,13 @@
       </div>
       <div class="row">
         <div class="row-head">
-          <span class="swatch" style="background: #78909C"></span>
+          <span class="swatch" style="background: #B0BEC5"></span>
           <span class="lbl">Growth (%)</span>
         </div>
         <div class="slider-wrap"><input type="range" id="p_growth" min="0" max="5" step="0.1" value="1.5"></div>
         <span class="val" id="v_growth">1.5%</span>
       </div>
+      <button class="btn-reset" onclick="resetInputs()">Reset</button>
     </div>
 
     <div>

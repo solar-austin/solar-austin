@@ -49,9 +49,27 @@ h1 {
   font-size: 13px;
 }
 
+.btn-reset {
+  margin-top: 12px;
+  width: 100%;
+  background: #fff;
+  color: #333;
+  border: 1px solid #ccc;
+  padding: 10px 18px;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.btn-reset:hover {
+  background: #f5f5f5;
+  border-color: #999;
+}
+
 .grid-main {
   display: grid;
-  grid-template-columns: 340px 1fr;
+  grid-template-columns: 340px minmax(0, 1fr);
   gap: 20px;
 }
 
@@ -130,7 +148,7 @@ h1 {
   font-size: 11px;
   font-weight: 700;
   color: #555;
-  min-width: 52px;
+  min-width: 72px;
   text-align: right;
   flex-shrink: 0;
 }
@@ -188,15 +206,23 @@ input[type="range"] {
   margin-top: 6px;
 }
 
-.chart-box {
-  height: 280px;
+.chart-box,
+.chart-box-sm {
+  max-width: 100%;
   position: relative;
 }
 
+.chart-box canvas,
+.chart-box-sm canvas {
+  max-width: 100% !important;
+}
+
+.chart-box {
+  height: 280px;
+}
 
 .chart-box-sm {
   height: 260px;
-  position: relative;
   padding-bottom: 20px;
 }
 

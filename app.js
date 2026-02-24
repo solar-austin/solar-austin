@@ -18,17 +18,22 @@ const CF = { wind: 0.35, solar: 0.25, geo: 0.9, gas: 0.05, nuke: 0.9 };
 /** Wholesale or proxy energy prices ($/MWh) used for the estimated generation rate (¢/kWh). */
 const PRICES = { nuke: 35, gas: 75, exWind: 28, exSolar: 24, newWind: 48, newSolar: 36, geo: 85, gap: 120 };
 
-/** Chart colors (c) and legend labels (l) for each supply/gap series in the energy mix stack. */
+/**
+ * Chart colors (c) and legend labels (l). Wind and solar are single-hue pairs: same color, light then dark (same shade step).
+ */
 const STYLES = {
-  nuke: { c: '#9E9E9E', l: 'Nuclear' },
-  gas: { c: '#607D8B', l: 'Local Gas' },
-  exWind: { c: '#90CAF9', l: 'Exist. Wind' },
-  exSolar: { c: '#FFCC80', l: 'Exist. Solar' },
-  geo: { c: '#795548', l: 'New Geo' },
-  newWind: { c: '#1976D2', l: 'New Wind' },
-  newSolar: { c: '#F57C00', l: 'New Solar' },
-  gap: { c: '#D32F2F', l: 'Market Gap' },
+  nuke: { c: '#B0BEC5', l: 'Nuclear' },
+  gas: { c: '#90A4AE', l: 'Local Gas' },
+  exWind: { c: '#B3E5FC', l: 'Exist. Wind' },   // light blue
+  newWind: { c: '#4FC3F7', l: 'New Wind' },     // dark blue (same hue)
+  exSolar: { c: '#FFDDA0', l: 'Exist. Solar' }, // light orange (same hue as New Solar)
+  newSolar: { c: '#E09328', l: 'New Solar' },   // dark orange (same hue)
+  geo: { c: '#A1887F', l: 'New Geo' },
+  gap: { c: '#E57373', l: 'Market Gap' },
 };
+
+/** Stack/legend order: pairs Exist. Wind + New Wind, then Exist. Solar + New Solar. */
+const MIX_CHART_ORDER = ['nuke', 'gas', 'exWind', 'newWind', 'exSolar', 'newSolar', 'geo', 'gap'];
 
 /**
  * 24-hour normalized profiles for the August peak reliability stress test.
@@ -58,9 +63,9 @@ function update() {
 
   document.getElementById('v_tx').textContent = '$' + tx;
   document.getElementById('v_growth').textContent = growth + '%';
-  document.getElementById('v_solar').textContent = nSolar;
-  document.getElementById('v_wind').textContent = nWind;
-  document.getElementById('v_geo').textContent = nGeo;
+  document.getElementById('v_solar').textContent = nSolar + ' MW/yr';
+  document.getElementById('v_wind').textContent = nWind + ' MW/yr';
+  document.getElementById('v_geo').textContent = nGeo + ' MW/yr';
   document.getElementById('v_gas').textContent = gas + ' MW';
   document.getElementById('v_batt').textContent = batt + ' MW';
 
@@ -118,14 +123,15 @@ function update() {
 }
 
 /**
- * Runs a 24-hour August peak stress test: for each hour, compares load (from PROF.load) to supply
- * (gas, geo, battery, plus solar/wind scaled by PROF). Returns hourly load/supply and count of risk hours (load > supply + 10 MW).
+ * Runs a 24-hour August peak stress test. Supply = gas, geo, solar, wind (by hour), plus a stateful
+ * battery that charges on surplus and discharges to fill deficits, smoothing the supply curve.
+ * Battery: power limit = batt MW, energy capacity = 4h (batt * 4 MWh), starts at 50% SoC.
  *
  * @param {number} sol - Solar capacity (MW) in stress test
  * @param {number} win - Wind capacity (MW)
  * @param {number} geo - Geothermal (MW)
  * @param {number} gas - Local gas (MW)
- * @param {number} batt - Firm battery (MW)
+ * @param {number} batt - Firm battery power (MW), 4h duration
  * @param {number} growth - Annual load growth (%)
  * @returns {{ sim: { load: number[], supply: number[] }, risk: number }}
  */
@@ -133,9 +139,21 @@ function runReliability(sol, win, geo, gas, batt, growth) {
   const peak = 3150 * Math.pow(1 + growth / 100, 10);
   const sim = { load: [], supply: [] };
   let risk = 0;
+  const E_cap = batt * 4; // MWh, 4-hour duration
+  let soc = E_cap * 0.5;  // start at 50% state of charge
+
   for (let h = 0; h < 24; h++) {
     const l = PROF.load[h] * peak;
-    const s = 400 + gas + sol * PROF.solar[h] + win * PROF.wind[h] * 0.2 + geo + Math.min(batt, l * 0.1);
+    const supplyNoBatt = 400 + gas + geo + sol * PROF.solar[h] + win * PROF.wind[h] * 0.2;
+    const deficit = Math.max(0, l - supplyNoBatt);
+    const surplus = Math.max(0, supplyNoBatt - l);
+
+    const discharge = Math.min(deficit, batt, soc);
+    soc -= discharge;
+    const charge = Math.min(surplus, batt, E_cap - soc);
+    soc += charge;
+
+    const s = supplyNoBatt + discharge;
     sim.load.push(l);
     sim.supply.push(s);
     if (l > s + 10) risk++;
@@ -154,19 +172,59 @@ function hourToTimeOfDay(hour) {
   return hour < 12 ? hour + 'am' : hour - 12 + 'pm';
 }
 
+/** Spacing between diagonal hatch lines (larger = lines further apart). Tile size must be a multiple. */
+const HATCH_SPACING = 14;
+
+/** Creates a repeating diagonal-line (hatch) pattern for deficit/gap fill. Lines align across tiles. */
+function createDeficitHatchPattern(ctx) {
+  // Use a tile size that is a multiple of spacing, and draw full-length diagonals so the pattern
+  // doesn't look "dashed" where it crosses tile boundaries.
+  const size = HATCH_SPACING * 4;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const c = canvas.getContext('2d');
+  c.setLineDash([]);
+  c.lineCap = 'butt';
+  // Align 1px strokes to the pixel grid for crisper, consistent lines.
+  c.translate(0.5, 0.5);
+  c.strokeStyle = 'rgba(229, 115, 115, 1)';
+  c.lineWidth = 1;
+  c.beginPath();
+  // 45° lines (y = x - offset). Offsets are spaced evenly and tile cleanly.
+  for (let offset = -size; offset <= size; offset += HATCH_SPACING) {
+    c.moveTo(offset, 0);
+    c.lineTo(offset + size, size);
+  }
+  c.stroke();
+  return ctx.createPattern(canvas, 'repeat');
+}
+
 /**
  * Builds or updates the 11-year stacked area chart (TWh) with Chart.js. Legend and tooltips are built-in.
  *
  * @param {Object} data - Keys match STYLES; each value is an array of length YEARS (TWh per year).
  */
+/** Washed red for deficit/gap (matches reliability chart and mix chart). */
+const DEFICIT_RED = 'rgba(229, 115, 115, 0.5)';
+
+/** Alpha for top-chart stack fill (1 = fully opaque). */
+const MIX_FILL_ALPHA = 1;
+
+function hexToRgba(hex, alpha) {
+  const n = parseInt(hex.slice(1), 16);
+  const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
 function drawMix(data) {
   const labels = Array.from({ length: YEARS }, (_, i) => String(BASE_YEAR + i));
-  const keys = Object.keys(STYLES);
+  const keys = MIX_CHART_ORDER;
   const datasets = keys.map((k) => ({
     label: STYLES[k].l,
     data: data[k],
-    backgroundColor: STYLES[k].c,
-    borderColor: STYLES[k].c,
+    backgroundColor: k === 'gap' ? null : hexToRgba(STYLES[k].c, MIX_FILL_ALPHA),
+    borderColor: k === 'gap' ? 'rgba(229, 115, 115, 0.8)' : STYLES[k].c,
     borderWidth: 0,
     fill: true,
     stack: 'stack0',
@@ -174,18 +232,36 @@ function drawMix(data) {
     pointRadius: 0,
     hoverPointRadius: 0,
     pointHitRadius: 20,
+    // Ensure the hatched gap is drawn on top of other semi-transparent fills.
+    order: k === 'gap' ? 2 : 1,
   }));
+
+  datasets.push({
+    label: 'Usage',
+    data: data.load,
+    backgroundColor: 'transparent',
+    borderColor: '#000',
+    borderWidth: 3,
+    fill: false,
+    tension: 0,
+    pointRadius: 0,
+    hoverPointRadius: 0,
+    pointHitRadius: 12,
+    order: 10,
+  });
 
   if (mixChartInstance) {
     mixChartInstance.data.labels = labels;
     mixChartInstance.data.datasets.forEach((ds, i) => {
-      ds.data = data[keys[i]];
+      ds.data = i < keys.length ? data[keys[i]] : data.load;
     });
     mixChartInstance.update('none');
     return;
   }
 
   const ctx = document.getElementById('mixChart').getContext('2d');
+  const gapIdx = keys.indexOf('gap');
+  if (gapIdx !== -1) datasets[gapIdx].backgroundColor = createDeficitHatchPattern(ctx);
   mixChartInstance = new Chart(ctx, {
     type: 'line',
     data: { labels, datasets },
@@ -194,6 +270,8 @@ function drawMix(data) {
       maintainAspectRatio: false,
       interaction: { mode: 'point', intersect: true },
       plugins: {
+        // Draw all area fills before strokes so the black Usage line stays visible on top.
+        filler: { drawTime: 'beforeDatasetsDraw' },
         legend: { position: 'bottom' },
         tooltip: {
           callbacks: {
@@ -230,7 +308,7 @@ function drawRel(rel) {
     {
       label: 'Supply',
       data: rel.sim.supply,
-      backgroundColor: 'rgba(232, 245, 233, 0.9)',
+      backgroundColor: 'rgba(232, 245, 233, 1)',
       borderColor: '#81c784',
       borderWidth: 1,
       fill: true,
@@ -240,12 +318,13 @@ function drawRel(rel) {
     {
       label: 'Deficit',
       data: deficit,
-      backgroundColor: 'rgba(211, 47, 47, 0.5)',
-      borderColor: 'rgba(211, 47, 47, 0.8)',
+      backgroundColor: null, // set to hatch pattern when creating chart
+      borderColor: 'rgba(229, 115, 115, 0.9)',
       borderWidth: 0,
       fill: true,
       stack: 'area',
       tension: 0,
+      pointRadius: 0,
     },
     {
       label: 'Load',
@@ -268,6 +347,7 @@ function drawRel(rel) {
     relChartInstance.update('none');
   } else {
     const ctx = document.getElementById('relChart').getContext('2d');
+    datasets[1].backgroundColor = createDeficitHatchPattern(ctx);
     relChartInstance = new Chart(ctx, {
       type: 'line',
       data: { labels, datasets },
@@ -300,6 +380,26 @@ function drawRel(rel) {
 
   document.getElementById('k_risk').textContent = rel.risk;
   document.getElementById('risk_card').className = rel.risk > 0 ? 'kpi warn-bg' : 'kpi good-bg';
+}
+
+/** Default slider values (used by reset). */
+const DEFAULT_INPUTS = {
+  p_tx: 40,
+  p_wind: 100,
+  p_solar: 150,
+  p_geo: 50,
+  p_batt: 500,
+  p_gas: 500,
+  p_growth: 1.5,
+};
+
+/** Restore all inputs to defaults and refresh. */
+function resetInputs() {
+  Object.entries(DEFAULT_INPUTS).forEach(([id, value]) => {
+    const el = document.getElementById(id);
+    if (el) el.value = value;
+  });
+  update();
 }
 
 /**
