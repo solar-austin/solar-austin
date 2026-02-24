@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Austin Energy Model v35.1</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <h1>AE Dashboard v35.1</h1>
+    <button class="btn-solve" onclick="autoSolve()">🚀 Auto-Solve Reliability Gap</button>
+  </header>
+
+  <div class="kpi-bar">
+    <div class="kpi">
+      <div class="kpi-val" id="k_rate">0.0¢</div>
+      <div class="kpi-lbl">Est. Gen Rate</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-val" id="k_clean">0%</div>
+      <div class="kpi-lbl">Carbon Free</div>
+    </div>
+    <div class="kpi" id="risk_card">
+      <div class="kpi-val" id="k_risk">0</div>
+      <div class="kpi-lbl">Risk Hours</div>
+    </div>
+  </div>
+
+  <div class="grid-main">
+    <div class="card">
+      <h3>Inputs</h3>
+
+      <h4 class="input-section">Sources</h4>
+      <div class="row">
+        <div class="row-head">
+          <span class="swatch" style="background: #1976D2"></span>
+          <span class="lbl">New Wind (/yr)</span>
+        </div>
+        <div class="slider-wrap"><input type="range" id="p_wind" min="0" max="400" value="100"></div>
+        <span class="val" id="v_wind">100</span>
+      </div>
+      <div class="row">
+        <div class="row-head">
+          <span class="swatch" style="background: #F57C00"></span>
+          <span class="lbl">New Solar (/yr)</span>
+        </div>
+        <div class="slider-wrap"><input type="range" id="p_solar" min="0" max="400" value="150"></div>
+        <span class="val" id="v_solar">150</span>
+      </div>
+      <div class="row">
+        <div class="row-head">
+          <span class="swatch" style="background: #795548"></span>
+          <span class="lbl">Geothermal (/yr)</span>
+        </div>
+        <div class="slider-wrap"><input type="range" id="p_geo" min="0" max="400" value="50"></div>
+        <span class="val" id="v_geo">50</span>
+      </div>
+      <div class="row">
+        <div class="row-head">
+          <span class="swatch" style="background: #9C27B0"></span>
+          <span class="lbl">Firm Battery (MW)</span>
+        </div>
+        <div class="slider-wrap"><input type="range" id="p_batt" min="0" max="2500" value="500"></div>
+        <span class="val" id="v_batt">500</span>
+      </div>
+      <div class="row">
+        <div class="row-head">
+          <span class="swatch" style="background: #607D8B"></span>
+          <span class="lbl">Local Gas (MW)</span>
+        </div>
+        <div class="slider-wrap"><input type="range" id="p_gas" min="0" max="1500" value="500"></div>
+        <span class="val" id="v_gas">500</span>
+      </div>
+
+      <h4 class="input-section">Assumptions</h4>
+      <div class="row">
+        <div class="row-head">
+          <span class="swatch" style="background: var(--accent)"></span>
+          <span class="lbl">TCOS Adder ($)</span>
+        </div>
+        <div class="slider-wrap"><input type="range" id="p_tx" min="0" max="80" value="40"></div>
+        <span class="val" id="v_tx">$40</span>
+      </div>
+      <div class="row">
+        <div class="row-head">
+          <span class="swatch" style="background: #78909C"></span>
+          <span class="lbl">Growth (%)</span>
+        </div>
+        <div class="slider-wrap"><input type="range" id="p_growth" min="0" max="5" step="0.1" value="1.5"></div>
+        <span class="val" id="v_growth">1.5%</span>
+      </div>
+    </div>
+
+    <div>
+      <div class="card">
+        <h3>11-Year Energy Mix Stack (TWh)</h3>
+        <div class="chart-box"><canvas id="mixChart"></canvas></div>
+      </div>
+      <div class="card">
+        <h3>August Peak Reliability (24-Hour Stress Test)</h3>
+        <div class="chart-box-sm"><canvas id="relChart"></canvas></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
