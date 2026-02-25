@@ -13,10 +13,10 @@ const BASE_YEAR = 2025;
  * Capacity factors: average fraction of nameplate capacity that each resource produces over a year.
  * Used to convert MW or MW/year build into TWh (e.g. MW * 8760 * CF / 1e6).
  */
-const CF = { wind: 0.35, solar: 0.25, geo: 0.9, gas: 0.05, nuke: 0.9 };
+const CF = { wind: 0.35, solar: 0.25, geo: 0.9, gas: 0.05, coal: 0.6, nuke: 0.9 };
 
 /** Wholesale or proxy energy prices ($/MWh) used for the estimated generation rate (¢/kWh). */
-const PRICES = { nuke: 35, gas: 75, exWind: 28, exSolar: 24, newWind: 48, newSolar: 36, geo: 85, gap: 120 };
+const PRICES = { nuke: 35, gas: 75, coal: 45, exWind: 28, exSolar: 24, newWind: 48, newSolar: 36, geo: 85, gap: 120 };
 
 /**
  * Chart colors (c) and legend labels (l). Wind and solar are single-hue pairs: same color, light then dark (same shade step).
@@ -24,6 +24,7 @@ const PRICES = { nuke: 35, gas: 75, exWind: 28, exSolar: 24, newWind: 48, newSol
 const STYLES = {
   nuke: { c: '#B0BEC5', l: 'Nuclear' },
   gas: { c: '#90A4AE', l: 'Local Gas' },
+  coal: { c: '#5D4037', l: 'Coal' },
   exWind: { c: '#B3E5FC', l: 'Exist. Wind' },   // light blue
   newWind: { c: '#4FC3F7', l: 'New Wind' },     // dark blue (same hue)
   exSolar: { c: '#FFDDA0', l: 'Exist. Solar' }, // light orange (same hue as New Solar)
@@ -32,8 +33,8 @@ const STYLES = {
   gap: { c: '#E57373', l: 'Market Gap' },
 };
 
-/** Stack/legend order: pairs Exist. Wind + New Wind, then Exist. Solar + New Solar. */
-const MIX_CHART_ORDER = ['nuke', 'gas', 'exWind', 'newWind', 'exSolar', 'newSolar', 'geo', 'gap'];
+/** Stack/legend order: base first (bottom), then new resources on top. */
+const MIX_CHART_ORDER = ['nuke', 'gas', 'coal', 'exWind', 'exSolar', 'newWind', 'newSolar', 'geo', 'gap'];
 
 /**
  * 24-hour normalized profiles for the August peak reliability stress test.
@@ -59,6 +60,7 @@ function update() {
   const nWind = +document.getElementById('p_wind').value;
   const nGeo = +document.getElementById('p_geo').value;
   const gas = +document.getElementById('p_gas').value;
+  const coal = +document.getElementById('p_coal').value;
   const batt = +document.getElementById('p_batt').value;
 
   document.getElementById('v_tx').textContent = '$' + tx;
@@ -67,9 +69,10 @@ function update() {
   document.getElementById('v_wind').textContent = nWind + ' MW/yr';
   document.getElementById('v_geo').textContent = nGeo + ' MW/yr';
   document.getElementById('v_gas').textContent = gas + ' MW';
+  document.getElementById('v_coal').textContent = coal + ' MW';
   document.getElementById('v_batt').textContent = batt + ' MW';
 
-  const data = { nuke: [], gas: [], exWind: [], exSolar: [], geo: [], newWind: [], newSolar: [], gap: [], load: [] };
+  const data = { nuke: [], gas: [], coal: [], exWind: [], exSolar: [], geo: [], newWind: [], newSolar: [], gap: [], load: [] };
 
   for (let i = 0; i < YEARS; i++) {
     const yrLoad = 14.2 * Math.pow(1 + growth / 100, i);
@@ -85,34 +88,37 @@ function update() {
     const winTwh = (nWind * buildYrs * 8760 * CF.wind) / 1e6;
     const solTwh = (nSolar * buildYrs * 8760 * CF.solar) / 1e6;
     const gasTwh = (gas * 8760 * CF.gas) / 1e6;
+    const coalTwh = (coal * 8760 * CF.coal) / 1e6;
 
     data.nuke.push(nuke);
     data.gas.push(gasTwh);
+    data.coal.push(coalTwh);
     data.exWind.push(exW);
     data.exSolar.push(exS);
     data.geo.push(geoTwh);
     data.newWind.push(winTwh);
     data.newSolar.push(solTwh);
 
-    const totalSup = nuke + exW + exS + geoTwh + winTwh + solTwh + gasTwh;
+    const totalSup = nuke + exW + exS + geoTwh + winTwh + solTwh + gasTwh + coalTwh;
     data.gap.push(Math.max(0, yrLoad - totalSup));
   }
 
   // Carbon Free Calculation (Excludes Gas and Market Gap)
   const lastIdx = YEARS - 1;
   const total2035 = data.load[lastIdx];
-  const carbonSources = data.gas[lastIdx] + data.gap[lastIdx];
+  const carbonSources = data.gas[lastIdx] + data.coal[lastIdx] + data.gap[lastIdx];
   const carbonFreePct = Math.max(0, ((total2035 - carbonSources) / total2035) * 100);
   document.getElementById('k_clean').textContent = carbonFreePct.toFixed(0) + '%';
 
   drawMix(data);
-  const rel = runReliability(nSolar * 9, nWind * 9, nGeo * 9, gas, batt, growth);
+  const rel = runReliability(nSolar * 9, nWind * 9, nGeo * 9, gas, coal, batt, growth);
   drawRel(rel);
 
   // Financial Summary
   const totCost =
     3.4 * (35 + tx) +
     data.gas[lastIdx] * 75 +
+    data.coal[lastIdx] * PRICES.coal +
     3.7 * (28 + tx) +
     2.0 * (24 + tx) +
     data.geo[lastIdx] * 85 +
@@ -129,7 +135,7 @@ function update() {
  * stored by hour so the chart still displays midnight→midnight.
  * Power limit = batt MW, energy capacity = 4h (batt * 4 MWh).
  */
-function runReliability(sol, win, geo, gas, batt, growth) {
+function runReliability(sol, win, geo, gas, coal, batt, growth) {
   const peak = 3150 * Math.pow(1 + growth / 100, 10);
   const E_cap = batt * 4; // MWh, 4-hour duration
 
@@ -137,7 +143,7 @@ function runReliability(sol, win, geo, gas, batt, growth) {
   let totalSurplus = 0;
   for (let h = 0; h < 24; h++) {
     const l = PROF.load[h] * peak;
-    const supplyNoBatt = 400 + gas + geo + sol * PROF.solar[h] + win * PROF.wind[h] * 0.2;
+    const supplyNoBatt = 400 + gas + coal + geo + sol * PROF.solar[h] + win * PROF.wind[h] * 0.2;
     totalSurplus += Math.max(0, supplyNoBatt - l);
   }
   let soc = Math.min(E_cap, totalSurplus);
@@ -148,7 +154,7 @@ function runReliability(sol, win, geo, gas, batt, growth) {
   for (let i = 0; i < 24; i++) {
     const h = (12 + i) % 24;
     const l = PROF.load[h] * peak;
-    const supplyNoBatt = 400 + gas + geo + sol * PROF.solar[h] + win * PROF.wind[h] * 0.2;
+    const supplyNoBatt = 400 + gas + coal + geo + sol * PROF.solar[h] + win * PROF.wind[h] * 0.2;
     const deficit = Math.max(0, l - supplyNoBatt);
     const discharge = Math.min(deficit, batt, soc);
     soc -= discharge;
@@ -403,6 +409,7 @@ const DEFAULT_INPUTS = {
   p_geo: 50,
   p_batt: 500,
   p_gas: 500,
+  p_coal: 0,
   p_growth: 1.5,
 };
 
