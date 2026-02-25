@@ -114,6 +114,33 @@
       </div>
     </div>
   </div>
+
+  <div class="grid-bot">
+    <div class="card">
+      <h3>Landed Cost Financials (2035 Snapshot)</h3>
+      <table class="fin-table">
+        <thead>
+          <tr>
+            <th class="fin-resource">Resource</th>
+            <th>Vol (TWh)</th>
+            <th>Base ($)</th>
+            <th>Tx Adder ($)</th>
+            <th>Total ($M)</th>
+          </tr>
+        </thead>
+        <tbody id="finBody"></tbody>
+        <tfoot>
+          <tr class="fin-total">
+            <td>TOTAL SYSTEM</td>
+            <td id="t_vol">--</td>
+            <td>Avg: <span id="t_avg">--</span></td>
+            <td></td>
+            <td id="t_cost">--</td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js"></script>

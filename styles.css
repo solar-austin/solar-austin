@@ -269,6 +269,37 @@ td {
   padding: 6px 8px;
   border-bottom: 1px solid #f0f0f0;
   text-align: right;
+  vertical-align: middle;
+}
+
+td:first-child {
+  text-align: left;
+  font-weight: 600;
+}
+
+.grid-bot {
+  margin-top: 5px;
+}
+
+.fin-table th.fin-resource {
+  width: 25%;
+}
+
+.fin-table tfoot tr.fin-total {
+  background: #f0f0f0;
+  font-weight: 700;
+}
+
+.money-inp {
+  width: 55px;
+  text-align: right;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  padding: 2px;
+  font-size: 11px;
+  font-family: inherit;
+  font-weight: 600;
+  color: var(--accent);
 }
 
 .warn-bg {

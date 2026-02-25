@@ -50,6 +50,9 @@ const PROF = {
   wind: [0.5, 0.45, 0.4, 0.35, 0.3, 0.25, 0.2, 0.15, 0.1, 0.1, 0.15, 0.2, 0.25, 0.2, 0.15, 0.15, 0.2, 0.25, 0.35, 0.45, 0.55, 0.6, 0.6, 0.55],
 };
 
+/** Nuclear TWh (constant in mix). Used to derive baseload MW in reliability so both use same assumption. */
+const NUKE_TWH = 3.4;
+
 /**
  * Reads slider values, recomputes 11-year supply/load and gap, updates KPIs and both charts.
  */
@@ -77,7 +80,7 @@ function update() {
   for (let i = 0; i < YEARS; i++) {
     const yrLoad = 14.2 * Math.pow(1 + growth / 100, i);
     data.load.push(yrLoad);
-    const nuke = 3.4;
+    const nuke = NUKE_TWH;
     // Existing wind TWh by year (year index 0..10); reflects retirements/curtailment over time.
     const exW = [5.3, 5.3, 4.5, 4.5, 4.5, 4.5, 3.9, 3.8, 3.7, 3.7, 3.7][i];
     // Existing solar TWh by year (year index 0..10); declines slightly in later years.
@@ -111,59 +114,156 @@ function update() {
   document.getElementById('k_clean').textContent = carbonFreePct.toFixed(0) + '%';
 
   drawMix(data);
-  const rel = runReliability(nSolar * 9, nWind * 9, nGeo * 9, gas, coal, batt, growth);
+  // Existing wind/solar in MW (2035) so the reliability chart has time-of-day shape when new build is zero
+  const exSolarMW = (data.exSolar[lastIdx] * 1e6) / (8760 * CF.solar);
+  const exWindMW = (data.exWind[lastIdx] * 1e6) / (8760 * CF.wind);
+  const rel = runReliability(
+    exSolarMW + nSolar * 9,
+    exWindMW + nWind * 9,
+    nGeo * 9,
+    gas,
+    coal,
+    batt,
+    growth
+  );
   drawRel(rel);
 
   // Financial Summary
-  const totCost =
-    3.4 * (35 + tx) +
-    data.gas[lastIdx] * 75 +
-    data.coal[lastIdx] * PRICES.coal +
-    3.7 * (28 + tx) +
-    2.0 * (24 + tx) +
-    data.geo[lastIdx] * 85 +
-    data.newWind[lastIdx] * (48 + tx) +
-    data.newSolar[lastIdx] * (36 + tx) +
-    data.gap[lastIdx] * 120;
-  document.getElementById('k_rate').textContent = (totCost / total2035 / 10).toFixed(1) + '¢';
+  const twh35 = {
+    nuke: data.nuke[lastIdx],
+    gas: data.gas[lastIdx],
+    coal: data.coal[lastIdx],
+    exWind: data.exWind[lastIdx],
+    exSolar: data.exSolar[lastIdx],
+    geo: data.geo[lastIdx],
+    newWind: data.newWind[lastIdx],
+    newSolar: data.newSolar[lastIdx],
+    gap: data.gap[lastIdx],
+  };
+  const totCostM = runFinancials(twh35, tx, total2035);
+  const rateCents = total2035 > 0 ? (totCostM / total2035 / 10) : 0;
+  document.getElementById('k_rate').textContent = rateCents.toFixed(1) + '¢';
 }
 
 /**
+ * Populates the Landed Cost Financials table (2035 snapshot). Resources with vol below 0.05 TWh are omitted.
+ * Remote resources get the TCOS adder applied. Returns total cost in $M.
+ */
+function runFinancials(twh, txAdder, loadTWh) {
+  const isRemote = (k) => ['nuke', 'coal', 'exWind', 'exSolar', 'newWind', 'newSolar', 'gap'].includes(k);
+  const rows = [
+    { k: 'newWind', n: 'New Wind' },
+    { k: 'newSolar', n: 'New Solar' },
+    { k: 'geo', n: 'Geothermal' },
+    { k: 'exWind', n: 'Exist. Wind' },
+    { k: 'exSolar', n: 'Exist. Solar' },
+    { k: 'coal', n: 'Coal' },
+    { k: 'gas', n: 'Local Gas' },
+    { k: 'nuke', n: 'Nuclear' },
+    { k: 'gap', n: 'Market Gap' },
+  ];
+
+  let html = '';
+  let tot = 0;
+
+  rows.forEach((d) => {
+    const vol = twh[d.k] ?? 0;
+    const baseP = PRICES[d.k] ?? 0;
+    const rem = isRemote(d.k);
+    const add = rem ? txAdder : 0;
+    const costM = vol * (baseP + add);
+    tot += costM; // include all resources in total so rate and footer are correct
+
+    if (vol < 0.05) return; // hide small rows from table
+
+    const adderTxt = rem ? `+$${add}` : '--';
+    const color = STYLES[d.k]?.c ?? '#999';
+
+    html += `<tr>
+      <td style="border-left:4px solid ${color}">${d.n}</td>
+      <td>${vol.toFixed(2)}</td>
+      <td><input class="money-inp" type="number" value="${baseP}" min="0" step="1" onchange="window.setPrice('${d.k}', this.value)"></td>
+      <td style="color:${rem ? '#d32f2f' : '#ccc'}">${adderTxt}</td>
+      <td>$${costM.toFixed(0)}</td>
+    </tr>`;
+  });
+
+  const finBody = document.getElementById('finBody');
+  const tVol = document.getElementById('t_vol');
+  const tAvg = document.getElementById('t_avg');
+  const tCost = document.getElementById('t_cost');
+  if (finBody) finBody.innerHTML = html;
+  if (tVol) tVol.textContent = loadTWh.toFixed(1);
+  if (tCost) tCost.textContent = '$' + tot.toFixed(0) + ' M';
+  const avgPerMwh = loadTWh > 0 ? tot / loadTWh : 0;
+  if (tAvg) tAvg.textContent = '$' + avgPerMwh.toFixed(0);
+
+  return tot;
+}
+
+/** Called from financial table inputs to update a resource's base price and refresh. */
+window.setPrice = function (key, value) {
+  const v = parseFloat(value);
+  if (!Number.isNaN(v) && PRICES[key] !== undefined) PRICES[key] = v;
+  update();
+};
+
+/**
  * Runs a 24-hour August peak stress test. Supply = gas, geo, solar, wind (by hour), plus battery.
- * Battery: initial SoC = total surplus (capped by E_cap). No charging; discharge only in deficit hours.
- * Simulation runs starting at noon (12→23, then 0→11) so surplus hours come first; results are
- * stored by hour so the chart still displays midnight→midnight.
- * Power limit = batt MW, energy capacity = 4h (batt * 4 MWh).
+ * Two-pass battery: (1) compute surplus/deficit each hour in time order; (2) simulate battery
+ * in order 0..23 so discharge happens as soon as possible after charging, with carry-over from
+ * end of day to start. Pass 2 is run twice so initial SoC = previous day's final SoC.
+ * Power limit = batt MW, energy capacity = 4h (batt * 4 MWh). Charge/discharge capped at batt MW per hour.
  */
 function runReliability(sol, win, geo, gas, coal, batt, growth) {
   const peak = 3150 * Math.pow(1 + growth / 100, 10);
   const E_cap = batt * 4; // MWh, 4-hour duration
-
-  // Initial SoC = total surplus over the day (no battery in this sum)
-  let totalSurplus = 0;
-  for (let h = 0; h < 24; h++) {
-    const l = PROF.load[h] * peak;
-    const supplyNoBatt = 400 + gas + coal + geo + sol * PROF.solar[h] + win * PROF.wind[h] * 0.2;
-    totalSurplus += Math.max(0, supplyNoBatt - l);
-  }
-  let soc = Math.min(E_cap, totalSurplus);
+  const nukeMW = (NUKE_TWH * 1e6) / (8760 * CF.nuke); // same nuclear assumption as mix
 
   const sim = { load: new Array(24), supply: new Array(24), supplyNoBatt: new Array(24), discharge: new Array(24) };
-  let risk = 0;
-  // Run simulation starting at noon (solar peak), then 0..11, so surplus comes before deficit
-  for (let i = 0; i < 24; i++) {
-    const h = (12 + i) % 24;
+  const surplus = new Array(24);
+  const def = new Array(24);
+
+  // Pass 1: compute load, supply without battery, surplus and deficit for each hour (0..23)
+  for (let h = 0; h < 24; h++) {
     const l = PROF.load[h] * peak;
-    const supplyNoBatt = 400 + gas + coal + geo + sol * PROF.solar[h] + win * PROF.wind[h] * 0.2;
-    const deficit = Math.max(0, l - supplyNoBatt);
-    const discharge = Math.min(deficit, batt, soc);
-    soc -= discharge;
-    const s = supplyNoBatt + discharge;
+    const supplyNoBatt = nukeMW + gas + coal + geo + sol * PROF.solar[h] + win * PROF.wind[h] * 0.2;
     sim.load[h] = l;
-    sim.supply[h] = s;
     sim.supplyNoBatt[h] = supplyNoBatt;
-    sim.discharge[h] = discharge;
-    if (l > s + 10) risk++;
+    surplus[h] = Math.max(0, supplyNoBatt - l);
+    def[h] = Math.max(0, l - supplyNoBatt);
+  }
+
+  // Pass 2a: run battery 0..23 with SoC starting at 0 to get end-of-day SoC (carry-over)
+  let soc = 0;
+  for (let h = 0; h < 24; h++) {
+    if (surplus[h] > 0) {
+      const charge = Math.min(surplus[h], batt, E_cap - soc);
+      soc += charge;
+    }
+    if (def[h] > 0) {
+      const dischargeH = Math.min(def[h], batt, soc);
+      soc -= dischargeH;
+    }
+  }
+  const socCarryOver = soc;
+
+  // Pass 2b: run battery 0..23 again with initial SoC = carry-over; use this for supply/discharge and risk
+  soc = socCarryOver;
+  let risk = 0;
+  for (let h = 0; h < 24; h++) {
+    if (surplus[h] > 0) {
+      const charge = Math.min(surplus[h], batt, E_cap - soc);
+      soc += charge;
+    }
+    let dischargeH = 0;
+    if (def[h] > 0) {
+      dischargeH = Math.min(def[h], batt, soc);
+      soc -= dischargeH;
+    }
+    sim.supply[h] = sim.supplyNoBatt[h] + dischargeH;
+    sim.discharge[h] = dischargeH;
+    if (sim.load[h] > sim.supply[h] + 10) risk++;
   }
   return { sim, risk };
 }
