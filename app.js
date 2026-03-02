@@ -53,8 +53,14 @@ const PROF = {
   wind: [0.5, 0.45, 0.4, 0.35, 0.3, 0.25, 0.2, 0.15, 0.1, 0.1, 0.15, 0.2, 0.25, 0.2, 0.15, 0.15, 0.2, 0.25, 0.35, 0.45, 0.55, 0.6, 0.6, 0.55],
 };
 
-/** DR shift profile (24h): positive = reduce load in that hour, negative = add load back. Sum = 0 so total MWh unchanged (load is shifted, not reduced). Peak hours 12–17 (noon–6pm) get +1; off-peak get -6/18 so sum is 0. */
-const DR_PROF = Array.from({ length: 24 }, (_, h) => (h >= 12 && h <= 17 ? 1 : -6 / 18));
+/** DR shift profile (24h): shift evening load toward solar peak (midday). Positive = reduce load (e.g. evening when solar is low), negative = add load (midday when solar is high). Proportional to (meanSolar - solar) so sum = 0 (energy conserved). Smooth and gradual; scale so max = 1 so dr MW is the max reduction. */
+const DR_PROF = (() => {
+  const solar = PROF.solar;
+  const meanS = solar.reduce((a, b) => a + b, 0) / 24;
+  const dev = solar.map((v) => meanS - v); // positive when solar low (evening), negative when solar high (midday)
+  const maxDev = Math.max(...dev);
+  return maxDev > 0 ? dev.map((d) => d / maxDev) : Array(24).fill(0);
+})();
 
 /** Nuclear TWh (constant in mix). Used to derive baseload MW in reliability so both use same assumption. */
 const NUKE_TWH = 3.4;
@@ -141,9 +147,11 @@ function update() {
   const exSolarMW = (data.exSolar[lastIdx] * 1e6) / (8760 * CF.solar);
   const exWindMW = (data.exWind[lastIdx] * 1e6) / (8760 * CF.wind);
   const rel = runReliability(
-    exSolarMW + nSolar * 9,
-    exWindMW + nWind * 9,
-    nGeo * 9,
+    exSolarMW,
+    exWindMW,
+    nSolar * buildYrsTotal,
+    nWind * buildYrsTotal,
+    nGeo * buildYrsTotal,
     gasBase,
     gasPeak,
     coal,
@@ -262,14 +270,30 @@ window.setPrice = function (key, value) {
  * Peaker runs only when supply (without peaker) is below the margin goal; it fills the shortfall up to peaker capacity. Battery targets margin goal.
  * Two-pass battery in order 0..23 with carry-over. Power limit = batt MW, energy capacity = 4h.
  */
-function runReliability(sol, win, geo, gasBase, gasPeak, coal, ee, dr, batt, growth, marginGoalPct) {
+function runReliability(exSolarMW, exWindMW, newSolarMW, newWindMW, geo, gasBase, gasPeak, coal, ee, dr, batt, growth, marginGoalPct) {
   const peak = 3150 * Math.pow(1 + growth / 100, 10);
   const E_cap = batt * 4; // MWh, 4-hour duration
   const nukeMW = (NUKE_TWH * 1e6) / (8760 * CF.nuke); // same nuclear assumption as mix
   const eeFirm = ee * 0.7; // 70% of EE reduces load (MW) during stress
   const marginGoal = (marginGoalPct ?? 15) / 100;
+  const sol = exSolarMW + newSolarMW;
+  const win = exWindMW + newWindMW;
 
-  const sim = { load: new Array(24), supply: new Array(24), supplyNoBatt: new Array(24), peaker: new Array(24), discharge: new Array(24) };
+  const sim = {
+    load: new Array(24),
+    supply: new Array(24),
+    supplyNoBatt: new Array(24),
+    nuke: new Array(24),
+    gasBase: new Array(24),
+    coal: new Array(24),
+    geo: new Array(24),
+    exSolar: new Array(24),
+    exWind: new Array(24),
+    newSolar: new Array(24),
+    newWind: new Array(24),
+    peaker: new Array(24),
+    discharge: new Array(24),
+  };
   const surplus = new Array(24);
   const def = new Array(24);
 
@@ -279,9 +303,19 @@ function runReliability(sol, win, geo, gasBase, gasPeak, coal, ee, dr, batt, gro
     const netLoad = Math.max(0, grossLoad - eeFirm - dr * DR_PROF[h]);
     sim.load[h] = netLoad;
     const targetSupply = netLoad * (1 + marginGoal);
-    const supplyNoPeaker = nukeMW + gasBase + coal + geo + sol * PROF.solar[h] + win * PROF.wind[h] * 0.2;
+    const solarMW = sol * PROF.solar[h];
+    const windMW = win * PROF.wind[h] * 0.2;
+    sim.exSolar[h] = exSolarMW * PROF.solar[h];
+    sim.exWind[h] = exWindMW * PROF.wind[h] * 0.2;
+    sim.newSolar[h] = newSolarMW * PROF.solar[h];
+    sim.newWind[h] = newWindMW * PROF.wind[h] * 0.2;
+    const supplyNoPeaker = nukeMW + gasBase + coal + geo + solarMW + windMW;
     const shortfall = Math.max(0, targetSupply - supplyNoPeaker);
     const peakerMW = Math.min(gasPeak, shortfall);
+    sim.nuke[h] = nukeMW;
+    sim.gasBase[h] = gasBase;
+    sim.coal[h] = coal;
+    sim.geo[h] = geo;
     sim.peaker[h] = peakerMW;
     const supplyNoBatt = supplyNoPeaker + peakerMW;
     sim.supplyNoBatt[h] = supplyNoBatt;
@@ -495,35 +529,85 @@ function drawMix(data) {
   });
 }
 
+/** Battery color in reliability chart (matches sidebar Firm Battery swatch). */
+const REL_BATT_COLOR = '#CE93D8';
+
+/** Reliability chart stack order and style keys (matches mix chart: existing then new, same colors). */
+const REL_STACK_ORDER = [
+  { simKey: 'nuke', styleKey: 'nuke' },
+  { simKey: 'gasBase', styleKey: 'gasBase' },
+  { simKey: 'coal', styleKey: 'coal' },
+  { simKey: 'exWind', styleKey: 'exWind' },
+  { simKey: 'exSolar', styleKey: 'exSolar' },
+  { simKey: 'newWind', styleKey: 'newWind' },
+  { simKey: 'newSolar', styleKey: 'newSolar' },
+  { simKey: 'geo', styleKey: 'geo' },
+  { simKey: 'peaker', styleKey: 'gasPeak' },
+];
+
 /**
- * Builds or updates the 24-hour reliability chart: generation (green), battery (blue stack), deficit (red hatch), load (line).
+ * Builds or updates the 24-hour reliability chart. If "Stack by resource type" is checked: supply stacked by type (same colors as chart 1), battery, deficit, load. Otherwise: single Generation + Peaker + Battery + Deficit + Load (legacy view).
  *
- * @param {{ sim: { load, supply, supplyNoBatt, peaker, discharge }, risk: number }} rel - Result from runReliability().
+ * @param {{ sim: { load, supply, supplyNoBatt, nuke, gasBase, coal, geo, exSolar, exWind, newSolar, newWind, peaker, discharge }, risk: number }} rel - Result from runReliability().
  */
 function drawRel(rel) {
   const labels = Array.from({ length: 24 }, (_, i) => hourToTimeOfDay(i));
   const deficit = rel.sim.load.map((l, i) => Math.max(0, l - rel.sim.supply[i]));
-  const supplyNoPeaker = rel.sim.supplyNoBatt.map((s, i) => s - (rel.sim.peaker[i] ?? 0));
+  const stackByType = document.getElementById('rel_stack_by_type').checked;
+  const expectedDatasets = stackByType ? REL_STACK_ORDER.length + 3 : 5;
+  if (relChartInstance && relChartInstance.data.datasets.length !== expectedDatasets) {
+    relChartInstance.destroy();
+    relChartInstance = null;
+  }
 
-  const datasets = [
-    {
-      label: 'Generation',
-      data: supplyNoPeaker,
-      backgroundColor: 'rgba(232, 245, 233, 1)',
-      borderColor: '#2e7d32',
-      borderWidth: 1,
-      fill: true,
-      stack: 'area',
-      tension: 0,
-      pointRadius: 0,
-      pointStyle: 'rect',
-      order: 1,
-    },
-    {
-      label: 'Peaker',
-      data: rel.sim.peaker ?? Array(24).fill(0),
-      backgroundColor: 'rgba(96, 125, 139, 0.85)',
-      borderColor: '#37474f',
+  const batteryDataset = {
+    label: 'Battery',
+    data: rel.sim.discharge,
+    backgroundColor: hexToRgba(REL_BATT_COLOR, 0.95),
+    borderColor: REL_BATT_COLOR,
+    borderWidth: 0,
+    fill: true,
+    stack: 'area',
+    tension: 0,
+    pointRadius: 0,
+    pointStyle: 'rect',
+    order: 1,
+  };
+  const deficitDataset = {
+    label: 'Deficit',
+    data: deficit,
+    backgroundColor: null,
+    borderColor: '#b71c1c',
+    borderWidth: 0,
+    fill: true,
+    stack: 'area',
+    tension: 0,
+    pointRadius: 0,
+    pointStyle: 'rect',
+    order: 1,
+  };
+  const loadDataset = {
+    label: 'Load',
+    data: rel.sim.load,
+    backgroundColor: 'transparent',
+    borderColor: '#000',
+    borderWidth: 2,
+    fill: false,
+    tension: 0,
+    pointRadius: 0,
+    stack: undefined,
+    pointStyle: 'line',
+    order: 0,
+  };
+
+  let datasets;
+  let deficitIdx;
+  if (stackByType) {
+    datasets = REL_STACK_ORDER.map(({ simKey, styleKey }) => ({
+      label: STYLES[styleKey].l,
+      data: rel.sim[simKey] ?? Array(24).fill(0),
+      backgroundColor: hexToRgba(STYLES[styleKey].c, 0.95),
+      borderColor: STYLES[styleKey].c,
       borderWidth: 0,
       fill: true,
       stack: 'area',
@@ -531,59 +615,73 @@ function drawRel(rel) {
       pointRadius: 0,
       pointStyle: 'rect',
       order: 1,
-    },
-    {
-      label: 'Battery',
-      data: rel.sim.discharge,
-      backgroundColor: 'rgba(227, 242, 253, 1)',
-      borderColor: '#0d47a1',
-      borderWidth: 1,
-      fill: true,
-      stack: 'area',
-      tension: 0,
-      pointRadius: 0,
-      pointStyle: 'rect',
-      order: 1,
-    },
-    {
-      label: 'Deficit',
-      data: deficit,
-      backgroundColor: null, // set to hatch pattern when creating chart
-      borderColor: '#b71c1c',
-      borderWidth: 0,
-      fill: true,
-      stack: 'area',
-      tension: 0,
-      pointRadius: 0,
-      pointStyle: 'rect',
-      order: 1,
-    },
-    {
-      label: 'Load',
-      data: rel.sim.load,
-      backgroundColor: 'transparent',
-      borderColor: '#000',
-      borderWidth: 2,
-      fill: false,
-      tension: 0,
-      pointRadius: 0,
-      stack: undefined,
-      pointStyle: 'line',
-      order: 0, // lower order = drawn last = on top (areas use order: 1 so they draw underneath)
-    },
-  ];
+    }));
+    datasets.push(batteryDataset, deficitDataset, loadDataset);
+    deficitIdx = REL_STACK_ORDER.length + 1;
+  } else {
+    const supplyNoPeaker = rel.sim.supplyNoBatt.map((s, i) => s - (rel.sim.peaker[i] ?? 0));
+    datasets = [
+      {
+        label: 'Generation',
+        data: supplyNoPeaker,
+        backgroundColor: 'rgba(232, 245, 233, 1)',
+        borderColor: '#2e7d32',
+        borderWidth: 0,
+        fill: true,
+        stack: 'area',
+        tension: 0,
+        pointRadius: 0,
+        pointStyle: 'rect',
+        order: 1,
+      },
+      {
+        label: 'Peaker',
+        data: rel.sim.peaker ?? Array(24).fill(0),
+        backgroundColor: hexToRgba(STYLES.gasPeak.c, 0.95),
+        borderColor: STYLES.gasPeak.c,
+        borderWidth: 0,
+        fill: true,
+        stack: 'area',
+        tension: 0,
+        pointRadius: 0,
+        pointStyle: 'rect',
+        order: 1,
+      },
+      batteryDataset,
+      deficitDataset,
+      loadDataset,
+    ];
+    deficitIdx = 3;
+  }
 
   if (relChartInstance) {
     relChartInstance.data.labels = labels;
-    relChartInstance.data.datasets[0].data = supplyNoPeaker;
-    relChartInstance.data.datasets[1].data = rel.sim.peaker ?? Array(24).fill(0);
-    relChartInstance.data.datasets[2].data = rel.sim.discharge;
-    relChartInstance.data.datasets[3].data = deficit;
-    relChartInstance.data.datasets[4].data = rel.sim.load;
+    if (stackByType) {
+      REL_STACK_ORDER.forEach(({ simKey }, i) => {
+        relChartInstance.data.datasets[i].data = rel.sim[simKey] ?? Array(24).fill(0);
+      });
+      relChartInstance.data.datasets[REL_STACK_ORDER.length].data = rel.sim.discharge;
+      relChartInstance.data.datasets[REL_STACK_ORDER.length + 1].data = deficit;
+      relChartInstance.data.datasets[REL_STACK_ORDER.length + 2].data = rel.sim.load;
+    } else {
+      const supplyNoPeaker = rel.sim.supplyNoBatt.map((s, i) => s - (rel.sim.peaker[i] ?? 0));
+      relChartInstance.data.datasets[0].data = supplyNoPeaker;
+      relChartInstance.data.datasets[1].data = rel.sim.peaker ?? Array(24).fill(0);
+      relChartInstance.data.datasets[2].data = rel.sim.discharge;
+      relChartInstance.data.datasets[3].data = deficit;
+      relChartInstance.data.datasets[4].data = rel.sim.load;
+    }
     relChartInstance.update('none');
   } else {
     const ctx = document.getElementById('relChart').getContext('2d');
-    datasets[3].backgroundColor = createDeficitHatchPattern(ctx);
+    datasets[deficitIdx].backgroundColor = createDeficitHatchPattern(ctx);
+    if (stackByType) {
+      REL_STACK_ORDER.forEach(({ styleKey }, i) => {
+        if (NEW_GENERATION_KEYS.includes(styleKey)) {
+          datasets[i].backgroundColor = createCrosshatchPattern(ctx, STYLES[styleKey].c);
+        }
+      });
+    }
     relChartInstance = new Chart(ctx, {
       type: 'line',
       data: { labels, datasets },
