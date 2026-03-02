@@ -13,18 +13,21 @@ const BASE_YEAR = 2025;
  * Capacity factors: average fraction of nameplate capacity that each resource produces over a year.
  * Used to convert MW or MW/year build into TWh (e.g. MW * 8760 * CF / 1e6).
  */
-const CF = { wind: 0.35, solar: 0.25, geo: 0.9, gas: 0.05, coal: 0.6, nuke: 0.9 };
+const CF = { wind: 0.35, solar: 0.25, geo: 0.9, gasBase: 0.5, gasPeak: 0.08, coal: 0.6, nuke: 0.9 };
 
 /** Wholesale or proxy energy prices ($/MWh) used for the estimated generation rate (¢/kWh). */
-const PRICES = { nuke: 35, gas: 75, coal: 45, exWind: 28, exSolar: 24, newWind: 48, newSolar: 36, geo: 85, gap: 120 };
+const PRICES = { nuke: 35, gasBase: 55, gasPeak: 95, coal: 45, ee: 25, dr: 25, exWind: 28, exSolar: 24, newWind: 48, newSolar: 36, geo: 85, gap: 120 };
 
 /**
  * Chart colors (c) and legend labels (l). Wind and solar are single-hue pairs: same color, light then dark (same shade step).
  */
 const STYLES = {
   nuke: { c: '#B0BEC5', l: 'Nuclear' },
-  gas: { c: '#90A4AE', l: 'Local Gas' },
+  gasBase: { c: '#90A4AE', l: 'Gas (Baseload)' },
+  gasPeak: { c: '#607D8B', l: 'Gas (Peaker)' },
   coal: { c: '#5D4037', l: 'Coal' },
+  ee: { c: '#2dd4bf', l: 'Energy Efficiency' },
+  dr: { c: '#14b8a6', l: 'Demand Response' },
   exWind: { c: '#B3E5FC', l: 'Exist. Wind' },   // light blue
   newWind: { c: '#4FC3F7', l: 'New Wind' },     // dark blue (same hue)
   exSolar: { c: '#FFDDA0', l: 'Exist. Solar' }, // light orange (same hue as New Solar)
@@ -34,7 +37,7 @@ const STYLES = {
 };
 
 /** Stack/legend order: base first (bottom), then new resources on top. */
-const MIX_CHART_ORDER = ['nuke', 'gas', 'coal', 'exWind', 'exSolar', 'newWind', 'newSolar', 'geo', 'gap'];
+const MIX_CHART_ORDER = ['nuke', 'gasBase', 'gasPeak', 'coal', 'exWind', 'exSolar', 'newWind', 'newSolar', 'geo', 'gap'];
 
 /**
  * 24-hour normalized profiles for the August peak reliability stress test.
@@ -50,6 +53,9 @@ const PROF = {
   wind: [0.5, 0.45, 0.4, 0.35, 0.3, 0.25, 0.2, 0.15, 0.1, 0.1, 0.15, 0.2, 0.25, 0.2, 0.15, 0.15, 0.2, 0.25, 0.35, 0.45, 0.55, 0.6, 0.6, 0.55],
 };
 
+/** DR shift profile (24h): positive = reduce load in that hour, negative = add load back. Sum = 0 so total MWh unchanged (load is shifted, not reduced). Peak hours 12–17 (noon–6pm) get +1; off-peak get -6/18 so sum is 0. */
+const DR_PROF = Array.from({ length: 24 }, (_, h) => (h >= 12 && h <= 17 ? 1 : -6 / 18));
+
 /** Nuclear TWh (constant in mix). Used to derive baseload MW in reliability so both use same assumption. */
 const NUKE_TWH = 3.4;
 
@@ -59,26 +65,38 @@ const NUKE_TWH = 3.4;
 function update() {
   const tx = +document.getElementById('p_tx').value;
   const growth = +document.getElementById('p_growth').value;
+  const marginGoalPct = +document.getElementById('p_margin_goal').value;
   const nSolar = +document.getElementById('p_solar').value;
   const nWind = +document.getElementById('p_wind').value;
   const nGeo = +document.getElementById('p_geo').value;
-  const gas = +document.getElementById('p_gas').value;
+  const gasBase = +document.getElementById('p_gas_base').value;
+  const gasPeak = +document.getElementById('p_gas_peak').value;
   const coal = +document.getElementById('p_coal').value;
+  const ee = +document.getElementById('p_ee').value;
+  const dr = +document.getElementById('p_dr').value;
   const batt = +document.getElementById('p_batt').value;
 
+  const buildYrsTotal = 9; // years of new build by end of horizon
   document.getElementById('v_tx').textContent = '$' + tx;
   document.getElementById('v_growth').textContent = growth + '%';
-  document.getElementById('v_solar').textContent = nSolar + ' MW/yr';
-  document.getElementById('v_wind').textContent = nWind + ' MW/yr';
-  document.getElementById('v_geo').textContent = nGeo + ' MW/yr';
-  document.getElementById('v_gas').textContent = gas + ' MW';
+  document.getElementById('v_margin_goal').textContent = marginGoalPct + '%';
+  document.getElementById('v_solar').innerHTML = nSolar + ' MW/yr<span class="val-total">' + (nSolar * buildYrsTotal) + ' MW total</span>';
+  document.getElementById('v_wind').innerHTML = nWind + ' MW/yr<span class="val-total">' + (nWind * buildYrsTotal) + ' MW total</span>';
+  document.getElementById('v_geo').innerHTML = nGeo + ' MW/yr<span class="val-total">' + (nGeo * buildYrsTotal) + ' MW total</span>';
+  document.getElementById('v_gas_base').textContent = gasBase + ' MW';
+  document.getElementById('v_gas_peak').textContent = gasPeak + ' MW';
   document.getElementById('v_coal').textContent = coal + ' MW';
+  document.getElementById('v_ee').textContent = ee + ' MW';
+  document.getElementById('v_dr').textContent = dr + ' MW';
   document.getElementById('v_batt').textContent = batt + ' MW';
 
-  const data = { nuke: [], gas: [], coal: [], exWind: [], exSolar: [], geo: [], newWind: [], newSolar: [], gap: [], load: [] };
+  const data = { nuke: [], gasBase: [], gasPeak: [], coal: [], exWind: [], exSolar: [], geo: [], newWind: [], newSolar: [], ee: [], dr: [], gap: [], load: [] };
 
   for (let i = 0; i < YEARS; i++) {
-    const yrLoad = 14.2 * Math.pow(1 + growth / 100, i);
+    const yrLoadGross = 14.2 * Math.pow(1 + growth / 100, i);
+    // EE/DR: effective energy savings (70% availability, ~2% equivalent CF for demand reduction)
+    const eeTwh = (ee * 0.7 * 8760 * 0.02) / 1e6;
+    const yrLoad = Math.max(0, yrLoadGross - eeTwh);
     data.load.push(yrLoad);
     const nuke = NUKE_TWH;
     // Existing wind TWh by year (year index 0..10); reflects retirements/curtailment over time.
@@ -90,26 +108,31 @@ function update() {
     const geoTwh = (nGeo * buildYrs * 8760 * CF.geo) / 1e6;
     const winTwh = (nWind * buildYrs * 8760 * CF.wind) / 1e6;
     const solTwh = (nSolar * buildYrs * 8760 * CF.solar) / 1e6;
-    const gasTwh = (gas * 8760 * CF.gas) / 1e6;
+    const gasBaseTwh = (gasBase * 8760 * CF.gasBase) / 1e6;
+    const gasPeakTwh = (gasPeak * 8760 * CF.gasPeak) / 1e6;
     const coalTwh = (coal * 8760 * CF.coal) / 1e6;
 
     data.nuke.push(nuke);
-    data.gas.push(gasTwh);
+    data.gasBase.push(gasBaseTwh);
+    data.gasPeak.push(gasPeakTwh);
     data.coal.push(coalTwh);
     data.exWind.push(exW);
     data.exSolar.push(exS);
     data.geo.push(geoTwh);
     data.newWind.push(winTwh);
     data.newSolar.push(solTwh);
+    data.ee.push(eeTwh);
+    // DR volume for financials: MWh shifted per year (e.g. 200 hours of DR events) → TWh
+    data.dr.push((dr * 200) / 1e6);
 
-    const totalSup = nuke + exW + exS + geoTwh + winTwh + solTwh + gasTwh + coalTwh;
+    const totalSup = nuke + exW + exS + geoTwh + winTwh + solTwh + gasBaseTwh + gasPeakTwh + coalTwh;
     data.gap.push(Math.max(0, yrLoad - totalSup));
   }
 
   // Carbon Free Calculation (Excludes Gas and Market Gap)
   const lastIdx = YEARS - 1;
   const total2035 = data.load[lastIdx];
-  const carbonSources = data.gas[lastIdx] + data.coal[lastIdx] + data.gap[lastIdx];
+  const carbonSources = data.gasBase[lastIdx] + data.gasPeak[lastIdx] + data.coal[lastIdx] + data.gap[lastIdx];
   const carbonFreePct = Math.max(0, ((total2035 - carbonSources) / total2035) * 100);
   document.getElementById('k_clean').textContent = carbonFreePct.toFixed(0) + '%';
 
@@ -121,18 +144,41 @@ function update() {
     exSolarMW + nSolar * 9,
     exWindMW + nWind * 9,
     nGeo * 9,
-    gas,
+    gasBase,
+    gasPeak,
     coal,
+    ee,
+    dr,
     batt,
-    growth
+    growth,
+    marginGoalPct
   );
   drawRel(rel);
+
+  // Supply margin: minimum hourly (supply - load) / load as %, from reliability run
+  let marginPct = 0;
+  for (let h = 0; h < 24; h++) {
+    const l = rel.sim.load[h];
+    if (l > 0) {
+      const m = ((rel.sim.supply[h] - l) / l) * 100;
+      if (h === 0 || m < marginPct) marginPct = m;
+    }
+  }
+  document.getElementById('k_margin').textContent = Math.round(marginPct) + '%';
+  const marginCard = document.getElementById('margin_card');
+  if (marginCard) {
+    const greenThreshold = marginGoalPct - 0.1; // green when at or above goal (safe for rounding)
+    marginCard.className = marginPct < 0 ? 'kpi warn-bg' : marginPct < greenThreshold ? 'kpi caution-bg' : 'kpi good-bg';
+  }
 
   // Financial Summary
   const twh35 = {
     nuke: data.nuke[lastIdx],
-    gas: data.gas[lastIdx],
+    gasBase: data.gasBase[lastIdx],
+    gasPeak: data.gasPeak[lastIdx],
     coal: data.coal[lastIdx],
+    ee: data.ee[lastIdx],
+    dr: data.dr[lastIdx],
     exWind: data.exWind[lastIdx],
     exSolar: data.exSolar[lastIdx],
     geo: data.geo[lastIdx],
@@ -155,10 +201,13 @@ function runFinancials(twh, txAdder, loadTWh) {
     { k: 'newWind', n: 'New Wind' },
     { k: 'newSolar', n: 'New Solar' },
     { k: 'geo', n: 'Geothermal' },
+    { k: 'ee', n: 'Energy Efficiency' },
+    { k: 'dr', n: 'Demand Response' },
     { k: 'exWind', n: 'Exist. Wind' },
     { k: 'exSolar', n: 'Exist. Solar' },
     { k: 'coal', n: 'Coal' },
-    { k: 'gas', n: 'Local Gas' },
+    { k: 'gasBase', n: 'Gas (Baseload)' },
+    { k: 'gasPeak', n: 'Gas (Peaker)' },
     { k: 'nuke', n: 'Nuclear' },
     { k: 'gap', n: 'Market Gap' },
   ];
@@ -209,29 +258,35 @@ window.setPrice = function (key, value) {
 };
 
 /**
- * Runs a 24-hour August peak stress test. Supply = gas, geo, solar, wind (by hour), plus battery.
- * Two-pass battery: (1) compute surplus/deficit each hour in time order; (2) simulate battery
- * in order 0..23 so discharge happens as soon as possible after charging, with carry-over from
- * end of day to start. Pass 2 is run twice so initial SoC = previous day's final SoC.
- * Power limit = batt MW, energy capacity = 4h (batt * 4 MWh). Charge/discharge capped at batt MW per hour.
+ * Runs a 24-hour August peak stress test. Supply = gas (baseload always, peaker only at peak), coal, geo, solar, wind, plus battery.
+ * Peaker runs only when supply (without peaker) is below the margin goal; it fills the shortfall up to peaker capacity. Battery targets margin goal.
+ * Two-pass battery in order 0..23 with carry-over. Power limit = batt MW, energy capacity = 4h.
  */
-function runReliability(sol, win, geo, gas, coal, batt, growth) {
+function runReliability(sol, win, geo, gasBase, gasPeak, coal, ee, dr, batt, growth, marginGoalPct) {
   const peak = 3150 * Math.pow(1 + growth / 100, 10);
   const E_cap = batt * 4; // MWh, 4-hour duration
   const nukeMW = (NUKE_TWH * 1e6) / (8760 * CF.nuke); // same nuclear assumption as mix
+  const eeFirm = ee * 0.7; // 70% of EE reduces load (MW) during stress
+  const marginGoal = (marginGoalPct ?? 15) / 100;
 
-  const sim = { load: new Array(24), supply: new Array(24), supplyNoBatt: new Array(24), discharge: new Array(24) };
+  const sim = { load: new Array(24), supply: new Array(24), supplyNoBatt: new Array(24), peaker: new Array(24), discharge: new Array(24) };
   const surplus = new Array(24);
   const def = new Array(24);
 
-  // Pass 1: compute load, supply without battery, surplus and deficit for each hour (0..23)
+  // Pass 1: EE reduces load; DR shifts it (peak → off-peak via DR_PROF, sum=0). Net load = gross - EE - dr×DR_PROF. Target supply = net load × (1 + marginGoal).
   for (let h = 0; h < 24; h++) {
-    const l = PROF.load[h] * peak;
-    const supplyNoBatt = nukeMW + gas + coal + geo + sol * PROF.solar[h] + win * PROF.wind[h] * 0.2;
-    sim.load[h] = l;
+    const grossLoad = PROF.load[h] * peak;
+    const netLoad = Math.max(0, grossLoad - eeFirm - dr * DR_PROF[h]);
+    sim.load[h] = netLoad;
+    const targetSupply = netLoad * (1 + marginGoal);
+    const supplyNoPeaker = nukeMW + gasBase + coal + geo + sol * PROF.solar[h] + win * PROF.wind[h] * 0.2;
+    const shortfall = Math.max(0, targetSupply - supplyNoPeaker);
+    const peakerMW = Math.min(gasPeak, shortfall);
+    sim.peaker[h] = peakerMW;
+    const supplyNoBatt = supplyNoPeaker + peakerMW;
     sim.supplyNoBatt[h] = supplyNoBatt;
-    surplus[h] = Math.max(0, supplyNoBatt - l);
-    def[h] = Math.max(0, l - supplyNoBatt);
+    surplus[h] = Math.max(0, supplyNoBatt - targetSupply);
+    def[h] = Math.max(0, targetSupply - supplyNoBatt);
   }
 
   // Pass 2a: run battery 0..23 with SoC starting at 0 to get end-of-day SoC (carry-over)
@@ -307,6 +362,37 @@ function createDeficitHatchPattern(ctx) {
   return ctx.createPattern(canvas, 'repeat');
 }
 
+/** Spacing for new-generation diagonal hatch (single direction). */
+const CROSSHATCH_SPACING = 12;
+
+/** Creates a repeating single-direction diagonal hatch (-45°) in the given hex color. Used for new generation (opposite direction to deficit hatch). */
+function createCrosshatchPattern(ctx, hexColor) {
+  const size = CROSSHATCH_SPACING * 3;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const c = canvas.getContext('2d');
+  const n = parseInt(hexColor.slice(1), 16);
+  const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+  c.fillStyle = `rgba(${r},${g},${b},1)`;
+  c.fillRect(0, 0, size, size);
+  c.strokeStyle = `rgba(255,255,255,0.25)`;
+  c.lineWidth = 1;
+  c.setLineDash([]);
+  c.lineCap = 'butt';
+  c.translate(0.5, 0.5);
+  for (let offset = -size; offset <= size * 2; offset += CROSSHATCH_SPACING) {
+    c.beginPath();
+    c.moveTo(offset, size);
+    c.lineTo(offset + size, 0);
+    c.stroke();
+  }
+  return ctx.createPattern(canvas, 'repeat');
+}
+
+/** Keys for new generation (get crosshatch pattern in mix chart). */
+const NEW_GENERATION_KEYS = ['newWind', 'newSolar', 'geo'];
+
 /**
  * Builds or updates the 11-year stacked area chart (TWh) with Chart.js. Legend and tooltips are built-in.
  *
@@ -339,8 +425,8 @@ function drawMix(data) {
     pointRadius: 0,
     hoverPointRadius: 0,
     pointHitRadius: 20,
-    // Ensure the hatched gap is drawn on top of other semi-transparent fills.
     order: k === 'gap' ? 2 : 1,
+    pointStyle: 'rect',
   }));
 
   datasets.push({
@@ -355,6 +441,7 @@ function drawMix(data) {
     hoverPointRadius: 0,
     pointHitRadius: 12,
     order: 10,
+    pointStyle: 'line',
   });
 
   if (mixChartInstance) {
@@ -369,17 +456,23 @@ function drawMix(data) {
   const ctx = document.getElementById('mixChart').getContext('2d');
   const gapIdx = keys.indexOf('gap');
   if (gapIdx !== -1) datasets[gapIdx].backgroundColor = createDeficitHatchPattern(ctx);
+  keys.forEach((k, i) => {
+    if (NEW_GENERATION_KEYS.includes(k)) datasets[i].backgroundColor = createCrosshatchPattern(ctx, STYLES[k].c);
+  });
   mixChartInstance = new Chart(ctx, {
     type: 'line',
     data: { labels, datasets },
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      interaction: { mode: 'point', intersect: true },
+      interaction: { mode: 'index', intersect: false },
       plugins: {
         // Draw all area fills before strokes so the black Usage line stays visible on top.
         filler: { drawTime: 'beforeDatasetsDraw' },
-        legend: { position: 'bottom' },
+        legend: {
+          position: 'bottom',
+          labels: { usePointStyle: true },
+        },
         tooltip: {
           callbacks: {
             label: (item) => `${item.dataset.label}: ${item.raw.toFixed(1)} TWh`,
@@ -393,7 +486,8 @@ function drawMix(data) {
         },
         y: {
           stacked: true,
-          beginAtZero: true,
+          min: 0,
+          max: 25,
           title: { display: true, text: 'TWh' },
         },
       },
@@ -404,16 +498,17 @@ function drawMix(data) {
 /**
  * Builds or updates the 24-hour reliability chart: generation (green), battery (blue stack), deficit (red hatch), load (line).
  *
- * @param {{ sim: { load, supply, supplyNoBatt, discharge }, risk: number }} rel - Result from runReliability().
+ * @param {{ sim: { load, supply, supplyNoBatt, peaker, discharge }, risk: number }} rel - Result from runReliability().
  */
 function drawRel(rel) {
   const labels = Array.from({ length: 24 }, (_, i) => hourToTimeOfDay(i));
   const deficit = rel.sim.load.map((l, i) => Math.max(0, l - rel.sim.supply[i]));
+  const supplyNoPeaker = rel.sim.supplyNoBatt.map((s, i) => s - (rel.sim.peaker[i] ?? 0));
 
   const datasets = [
     {
       label: 'Generation',
-      data: rel.sim.supplyNoBatt,
+      data: supplyNoPeaker,
       backgroundColor: 'rgba(232, 245, 233, 1)',
       borderColor: '#2e7d32',
       borderWidth: 1,
@@ -421,6 +516,21 @@ function drawRel(rel) {
       stack: 'area',
       tension: 0,
       pointRadius: 0,
+      pointStyle: 'rect',
+      order: 1,
+    },
+    {
+      label: 'Peaker',
+      data: rel.sim.peaker ?? Array(24).fill(0),
+      backgroundColor: 'rgba(96, 125, 139, 0.85)',
+      borderColor: '#37474f',
+      borderWidth: 0,
+      fill: true,
+      stack: 'area',
+      tension: 0,
+      pointRadius: 0,
+      pointStyle: 'rect',
+      order: 1,
     },
     {
       label: 'Battery',
@@ -432,6 +542,8 @@ function drawRel(rel) {
       stack: 'area',
       tension: 0,
       pointRadius: 0,
+      pointStyle: 'rect',
+      order: 1,
     },
     {
       label: 'Deficit',
@@ -443,6 +555,8 @@ function drawRel(rel) {
       stack: 'area',
       tension: 0,
       pointRadius: 0,
+      pointStyle: 'rect',
+      order: 1,
     },
     {
       label: 'Load',
@@ -453,20 +567,23 @@ function drawRel(rel) {
       fill: false,
       tension: 0,
       pointRadius: 0,
-      stack: undefined, // do not stack; draw as line over the area
+      stack: undefined,
+      pointStyle: 'line',
+      order: 0, // lower order = drawn last = on top (areas use order: 1 so they draw underneath)
     },
   ];
 
   if (relChartInstance) {
     relChartInstance.data.labels = labels;
-    relChartInstance.data.datasets[0].data = rel.sim.supplyNoBatt;
-    relChartInstance.data.datasets[1].data = rel.sim.discharge;
-    relChartInstance.data.datasets[2].data = deficit;
-    relChartInstance.data.datasets[3].data = rel.sim.load;
+    relChartInstance.data.datasets[0].data = supplyNoPeaker;
+    relChartInstance.data.datasets[1].data = rel.sim.peaker ?? Array(24).fill(0);
+    relChartInstance.data.datasets[2].data = rel.sim.discharge;
+    relChartInstance.data.datasets[3].data = deficit;
+    relChartInstance.data.datasets[4].data = rel.sim.load;
     relChartInstance.update('none');
   } else {
     const ctx = document.getElementById('relChart').getContext('2d');
-    datasets[2].backgroundColor = createDeficitHatchPattern(ctx);
+    datasets[3].backgroundColor = createDeficitHatchPattern(ctx);
     relChartInstance = new Chart(ctx, {
       type: 'line',
       data: { labels, datasets },
@@ -475,7 +592,10 @@ function drawRel(rel) {
         maintainAspectRatio: false,
         interaction: { mode: 'index', intersect: false },
         plugins: {
-          legend: { position: 'bottom' },
+          legend: {
+            position: 'bottom',
+            labels: { usePointStyle: true },
+          },
           tooltip: {
             callbacks: {
               label: (item) => `${item.dataset.label}: ${Math.round(item.raw)} MW`,
@@ -489,7 +609,8 @@ function drawRel(rel) {
           },
           y: {
             stacked: true,
-            beginAtZero: true,
+            min: 0,
+            max: 6500,
             title: { display: true, text: 'MW' },
           },
         },
@@ -508,9 +629,13 @@ const DEFAULT_INPUTS = {
   p_solar: 150,
   p_geo: 50,
   p_batt: 500,
-  p_gas: 500,
+  p_gas_base: 300,
+  p_gas_peak: 200,
   p_coal: 0,
+  p_ee: 0,
+  p_dr: 0,
   p_growth: 1.5,
+  p_margin_goal: 15,
 };
 
 /** Restore all inputs to defaults and refresh. */

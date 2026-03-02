@@ -11,19 +11,27 @@
 <div class="wrap">
   <header>
     <h1>AE Dashboard v35.1</h1>
-    <button class="btn-solve" onclick="autoSolve()">🚀 Auto-Solve Reliability Gap</button>
   </header>
 
   <div class="kpi-bar">
-    <div class="kpi">
+    <div class="kpi" title="Average cost of generation in 2035: total system cost (all resources including market gap) divided by 2035 load, in cents per kWh. Based on base $/MWh and TCOS adder for remote resources.">
       <div class="kpi-val" id="k_rate">0.0¢</div>
       <div class="kpi-lbl">Est. Gen Rate</div>
     </div>
-    <div class="kpi">
+    <div class="kpi" title="Share of 2035 energy that is not from gas, coal, or market gap. Higher means more generation from nuclear, wind, solar, geothermal, and EE/DR.">
       <div class="kpi-val" id="k_clean">0%</div>
       <div class="kpi-lbl">Carbon Free</div>
     </div>
-    <div class="kpi" id="risk_card">
+    <div class="kpi" id="margin_card" title="Worst-hour cushion on the August peak day: the minimum over 24 hours of (supply − load) / load, as a percent. Positive = headroom; negative = at least one deficit hour. Green when at or above goal.">
+      <div class="kpi-val" id="k_margin">0%</div>
+      <div class="kpi-lbl">Supply Margin</div>
+      <div class="kpi-goal">
+        <label class="kpi-goal-lbl">Goal</label>
+        <input type="range" id="p_margin_goal" min="0" max="30" step="1" value="15" class="kpi-goal-slider">
+        <span class="kpi-goal-val" id="v_margin_goal">15%</span>
+      </div>
+    </div>
+    <div class="kpi" id="risk_card" title="Number of hours on the August peak stress day when load exceeds supply by more than 10 MW. Zero means the system meets load every hour; red card when &gt; 0.">
       <div class="kpi-val" id="k_risk">0</div>
       <div class="kpi-lbl">Risk Hours</div>
     </div>
@@ -69,10 +77,18 @@
       <div class="row">
         <div class="row-head">
           <span class="swatch" style="background: #90A4AE"></span>
-          <span class="lbl">Local Gas (MW)</span>
+          <span class="lbl">Gas – Baseload (MW)</span>
         </div>
-        <div class="slider-wrap"><input type="range" id="p_gas" min="0" max="1500" value="500"></div>
-        <span class="val" id="v_gas">500</span>
+        <div class="slider-wrap"><input type="range" id="p_gas_base" min="0" max="1500" value="300"></div>
+        <span class="val" id="v_gas_base">300</span>
+      </div>
+      <div class="row">
+        <div class="row-head">
+          <span class="swatch" style="background: #607D8B"></span>
+          <span class="lbl">Gas – Peaker (MW)</span>
+        </div>
+        <div class="slider-wrap"><input type="range" id="p_gas_peak" min="0" max="1500" value="200"></div>
+        <span class="val" id="v_gas_peak">200</span>
       </div>
       <div class="row">
         <div class="row-head">
@@ -81,6 +97,22 @@
         </div>
         <div class="slider-wrap"><input type="range" id="p_coal" min="0" max="2000" value="0"></div>
         <span class="val" id="v_coal">0</span>
+      </div>
+      <div class="row">
+        <div class="row-head">
+          <span class="swatch" style="background: #2dd4bf"></span>
+          <span class="lbl">Energy Efficiency (MW)</span>
+        </div>
+        <div class="slider-wrap"><input type="range" id="p_ee" min="0" max="1200" value="0"></div>
+        <span class="val" id="v_ee">0</span>
+      </div>
+      <div class="row">
+        <div class="row-head">
+          <span class="swatch" style="background: #14b8a6"></span>
+          <span class="lbl">Demand Response (MW)</span>
+        </div>
+        <div class="slider-wrap"><input type="range" id="p_dr" min="0" max="1200" value="0"></div>
+        <span class="val" id="v_dr">0</span>
       </div>
 
       <h4 class="input-section">Assumptions</h4>
@@ -101,6 +133,7 @@
         <span class="val" id="v_growth">1.5%</span>
       </div>
       <button class="btn-reset" onclick="resetInputs()">Reset</button>
+      <button class="btn-solve" onclick="autoSolve()">🚀 Auto-Solve Reliability Gap</button>
     </div>
 
     <div>
