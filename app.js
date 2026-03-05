@@ -861,7 +861,6 @@ function autoSolve() {
   const tx = +document.getElementById('p_tx').value;
   const goal = +document.getElementById('p_margin_goal').value;
   let best = { totalCostM: Infinity, nWind: 0, nSolar: 0, nGeo: 0, batt: 0 };
-  const allFeasible = [];
 
   const WIND_VALS = Array.from({ length: 11 }, (_, i) => i * 40);
   const SOLAR_VALS = Array.from({ length: 11 }, (_, i) => i * 40);
@@ -876,28 +875,10 @@ function autoSolve() {
           if (minMarginPct + 1e-9 < goal) continue;
 
           const totalCostM = totalCostForBuild(nWind, nSolar, nGeo, batt, gasBase, gasPeak, coal, ee, dr, growth, tx);
-          allFeasible.push({ nWind, nSolar, nGeo, batt, totalCostM, minMarginPct });
           if (totalCostM < best.totalCostM) best = { totalCostM, nWind, nSolar, nGeo, batt };
         }
       }
     }
-  }
-
-  // Debug table: rank most expensive -> least (cheapest last = winner)
-  allFeasible.sort((a, b) => b.totalCostM - a.totalCostM);
-  const debugBody = document.getElementById('debugSolutionsBody');
-  if (debugBody) {
-    debugBody.innerHTML = allFeasible
-      .map((s, i) => `<tr${s.totalCostM === best.totalCostM ? ' class="debug-winner"' : ''}>
-        <td>${i + 1}</td>
-        <td>${s.nWind}</td>
-        <td>${s.nSolar}</td>
-        <td>${s.nGeo}</td>
-        <td>${s.batt}</td>
-        <td>$${Math.round(s.totalCostM)}</td>
-        <td>${s.minMarginPct.toFixed(1)}%</td>
-      </tr>`)
-      .join('');
   }
 
   if (best.totalCostM === Infinity) best = { nWind: 0, nSolar: 0, nGeo: 0, batt: 0, totalCostM: 0 };
@@ -911,5 +892,4 @@ function autoSolve() {
 // --- Init (runs when script loads; DOM ready because script is at end of body) ---
 document.querySelectorAll('input').forEach((i) => (i.oninput = update));
 window.addEventListener('load', update);
-
 
