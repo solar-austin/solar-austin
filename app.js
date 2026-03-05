@@ -15,8 +15,12 @@ const BASE_YEAR = 2025;
  */
 const CF = { wind: 0.35, solar: 0.25, geo: 0.9, gasBase: 0.5, gasPeak: 0.08, coal: 0.6, nuke: 0.9 };
 
-/** Wholesale or proxy energy prices ($/MWh) used for the estimated generation rate (¢/kWh). */
-const PRICES = { nuke: 35, gasBase: 55, gasPeak: 95, coal: 45, ee: 25, dr: 25, exWind: 28, exSolar: 24, newWind: 48, newSolar: 36, geo: 85, gap: 120 };
+/** Wholesale or proxy energy prices ($/MWh) for energy rows; batt is $k/MW-year for capacity. */
+const PRICES = { nuke: 35, gasBase: 55, gasPeak: 95, coal: 45, ee: 25, dr: 25, exWind: 28, exSolar: 24, newWind: 48, newSolar: 36, geo: 85, gap: 120, batt: 60 };
+
+// Cost units: vol (TWh) × price ($/MWh) → 1 TWh = 1e6 MWh, so cost ($) = vol × 1e6 × price, cost ($M) = vol × price.
+const MWH_PER_TWH = 1e6;
+const DOLLARS_PER_MILLION = 1e6;
 
 /**
  * Chart colors (c) and legend labels (l). Wind and solar are single-hue pairs: same color, light then dark (same shade step).
@@ -34,6 +38,7 @@ const STYLES = {
   newSolar: { c: '#E09328', l: 'New Solar' },   // dark orange (same hue)
   geo: { c: '#A1887F', l: 'New Geo' },
   gap: { c: '#E57373', l: 'Market Gap' },
+  batt: { c: '#CE93D8', l: 'Battery' },
 };
 
 /** Stack/legend order: base first (bottom), then new resources on top. */
@@ -45,7 +50,7 @@ const MIX_CHART_ORDER = ['nuke', 'gasBase', 'gasPeak', 'coal', 'exWind', 'exSola
  *
  * - load:  Relative demand by hour; 1.0 = peak (e.g. afternoon). Shapes the load curve.
  * - solar: Relative solar output by hour; peaks midday. Multiplied by solar MW to get supply.
- * - wind:  Relative wind output by hour. Multiplied by wind MW (and 0.2 factor) for supply.
+ * - wind:  Relative wind output by hour. Multiplied by wind MW for supply (same treatment as solar).
  */
 const PROF = {
   load: [0.45, 0.42, 0.40, 0.39, 0.41, 0.45, 0.52, 0.60, 0.68, 0.75, 0.82, 0.88, 0.94, 0.98, 1.00, 0.99, 0.96, 0.92, 0.85, 0.78, 0.70, 0.62, 0.55, 0.50],
@@ -53,17 +58,34 @@ const PROF = {
   wind: [0.5, 0.45, 0.4, 0.35, 0.3, 0.25, 0.2, 0.15, 0.1, 0.1, 0.15, 0.2, 0.25, 0.2, 0.15, 0.15, 0.2, 0.25, 0.35, 0.45, 0.55, 0.6, 0.6, 0.55],
 };
 
-/** DR shift profile (24h): shift evening load toward solar peak (midday). Positive = reduce load (e.g. evening when solar is low), negative = add load (midday when solar is high). Proportional to (meanSolar - solar) so sum = 0 (energy conserved). Smooth and gradual; scale so max = 1 so dr MW is the max reduction. */
-const DR_PROF = (() => {
-  const solar = PROF.solar;
-  const meanS = solar.reduce((a, b) => a + b, 0) / 24;
-  const dev = solar.map((v) => meanS - v); // positive when solar low (evening), negative when solar high (midday)
-  const maxDev = Math.max(...dev);
-  return maxDev > 0 ? dev.map((d) => d / maxDev) : Array(24).fill(0);
-})();
-
 /** Nuclear TWh (constant in mix). Used to derive baseload MW in reliability so both use same assumption. */
 const NUKE_TWH = 3.4;
+
+/** Existing wind/solar TWh in year 10 (2035) for reliability MW conversion. */
+const EXISTING_SOLAR_TWH_2035 = 2.0;
+const EXISTING_WIND_TWH_2035 = 3.7;
+const BUILD_YRS_TOTAL = 9;
+
+/** Build exact args for runReliability so chart and getMinMarginPct use identical inputs. */
+function getReliabilityArgs(nWind, nSolar, nGeo, batt, gasBase, gasPeak, coal, ee, dr, growth, marginGoalPct) {
+  const exSolarMW = (EXISTING_SOLAR_TWH_2035 * 1e6) / (8760 * CF.solar);
+  const exWindMW = (EXISTING_WIND_TWH_2035 * 1e6) / (8760 * CF.wind);
+  return [
+    exSolarMW,
+    exWindMW,
+    nSolar * BUILD_YRS_TOTAL,
+    nWind * BUILD_YRS_TOTAL,
+    nGeo * BUILD_YRS_TOTAL,
+    gasBase,
+    gasPeak,
+    coal,
+    ee,
+    dr,
+    batt,
+    growth,
+    marginGoalPct,
+  ];
+}
 
 /**
  * Reads slider values, recomputes 11-year supply/load and gap, updates KPIs and both charts.
@@ -82,7 +104,7 @@ function update() {
   const dr = +document.getElementById('p_dr').value;
   const batt = +document.getElementById('p_batt').value;
 
-  const buildYrsTotal = 9; // years of new build by end of horizon
+  const buildYrsTotal = BUILD_YRS_TOTAL;
   document.getElementById('v_tx').textContent = '$' + tx;
   document.getElementById('v_growth').textContent = growth + '%';
   document.getElementById('v_margin_goal').textContent = marginGoalPct + '%';
@@ -143,24 +165,7 @@ function update() {
   document.getElementById('k_clean').textContent = carbonFreePct.toFixed(0) + '%';
 
   drawMix(data);
-  // Existing wind/solar in MW (2035) so the reliability chart has time-of-day shape when new build is zero
-  const exSolarMW = (data.exSolar[lastIdx] * 1e6) / (8760 * CF.solar);
-  const exWindMW = (data.exWind[lastIdx] * 1e6) / (8760 * CF.wind);
-  const rel = runReliability(
-    exSolarMW,
-    exWindMW,
-    nSolar * buildYrsTotal,
-    nWind * buildYrsTotal,
-    nGeo * buildYrsTotal,
-    gasBase,
-    gasPeak,
-    coal,
-    ee,
-    dr,
-    batt,
-    growth,
-    marginGoalPct
-  );
+  const rel = runReliability(...getReliabilityArgs(nWind, nSolar, nGeo, batt, gasBase, gasPeak, coal, ee, dr, growth, marginGoalPct));
   drawRel(rel);
 
   // Supply margin: minimum hourly (supply - load) / load as %, from reliability run
@@ -194,16 +199,16 @@ function update() {
     newSolar: data.newSolar[lastIdx],
     gap: data.gap[lastIdx],
   };
-  const totCostM = runFinancials(twh35, tx, total2035);
+  const totCostM = runFinancials(twh35, tx, total2035, batt);
   const rateCents = total2035 > 0 ? (totCostM / total2035 / 10) : 0;
   document.getElementById('k_rate').textContent = rateCents.toFixed(1) + '¢';
 }
 
 /**
  * Populates the Landed Cost Financials table (2035 snapshot). Resources with vol below 0.05 TWh are omitted.
- * Remote resources get the TCOS adder applied. Returns total cost in $M.
+ * Remote resources get the TCOS adder applied. Battery row: capacity (MW), base $k/MW-year, total $M. Returns total cost in $M.
  */
-function runFinancials(twh, txAdder, loadTWh) {
+function runFinancials(twh, txAdder, loadTWh, battMW) {
   const isRemote = (k) => ['nuke', 'coal', 'exWind', 'exSolar', 'newWind', 'newSolar', 'gap'].includes(k);
   const rows = [
     { k: 'newWind', n: 'New Wind' },
@@ -224,33 +229,48 @@ function runFinancials(twh, txAdder, loadTWh) {
   let tot = 0;
 
   rows.forEach((d) => {
-    const vol = twh[d.k] ?? 0;
-    const baseP = PRICES[d.k] ?? 0;
+    const vol = twh[d.k] ?? 0; // TWh
+    const baseP = PRICES[d.k] ?? 0; // $/MWh for energy
     const rem = isRemote(d.k);
     const add = rem ? txAdder : 0;
-    const costM = vol * (baseP + add);
-    tot += costM; // include all resources in total so rate and footer are correct
+    // cost ($) = vol_TWh × 1e6 MWh/TWh × price_$/MWh → cost ($M) = vol × price
+    const costM = (vol * MWH_PER_TWH * (baseP + add)) / DOLLARS_PER_MILLION;
+    tot += costM;
 
-    if (vol < 0.05) return; // hide small rows from table
+    if (vol < 0.05) return;
 
     const adderTxt = rem ? `+$${add}` : '--';
     const color = STYLES[d.k]?.c ?? '#999';
 
     html += `<tr>
       <td style="border-left:4px solid ${color}">${d.n}</td>
-      <td>${vol.toFixed(2)}</td>
+      <td>${vol.toFixed(2)} TWh</td>
       <td><input class="money-inp" type="number" value="${baseP}" min="0" step="1" onchange="window.setPrice('${d.k}', this.value)"></td>
       <td style="color:${rem ? '#d32f2f' : '#ccc'}">${adderTxt}</td>
       <td>$${costM.toFixed(0)}</td>
     </tr>`;
   });
 
+  // Battery row: capacity (MW), base price $k/MW-year → cost $M = (batt × price_$k) / 1000
+  const batt = battMW ?? 0;
+  const battPrice = PRICES.batt ?? 60; // $k per MW per year
+  const battCostM = (batt * battPrice) / 1000;
+  tot += battCostM;
+  const battColor = STYLES.batt?.c ?? '#CE93D8';
+  html += `<tr>
+    <td style="border-left:4px solid ${battColor}">Battery</td>
+    <td>${batt} MW</td>
+    <td><input class="money-inp" type="number" value="${battPrice}" min="0" step="1" onchange="window.setPrice('batt', this.value)"></td>
+    <td style="color:#ccc">--</td>
+    <td>$${battCostM.toFixed(0)}</td>
+  </tr>`;
+
   const finBody = document.getElementById('finBody');
   const tVol = document.getElementById('t_vol');
   const tAvg = document.getElementById('t_avg');
   const tCost = document.getElementById('t_cost');
   if (finBody) finBody.innerHTML = html;
-  if (tVol) tVol.textContent = loadTWh.toFixed(1);
+  if (tVol) tVol.textContent = loadTWh.toFixed(1) + ' TWh';
   if (tCost) tCost.textContent = '$' + tot.toFixed(0) + ' M';
   const avgPerMwh = loadTWh > 0 ? tot / loadTWh : 0;
   if (tAvg) tAvg.textContent = '$' + avgPerMwh.toFixed(0);
@@ -265,9 +285,53 @@ window.setPrice = function (key, value) {
   update();
 };
 
+/** Existing wind/solar TWh by year (year index 0..10). Used by getTwh2035. */
+const EXISTING_WIND_TWH = [5.3, 5.3, 4.5, 4.5, 4.5, 4.5, 3.9, 3.8, 3.7, 3.7, 3.7];
+const EXISTING_SOLAR_TWH = [2.4, 2.4, 2.4, 2.4, 2.4, 2.4, 2.3, 2.3, 2.3, 2.3, 2.0];
+
+/**
+ * Returns 2035 TWh by resource and load for the given build/assumptions. Used by autoSolve to compute cost.
+ */
+function getTwh2035(nWind, nSolar, nGeo, gasBase, gasPeak, coal, ee, dr, growth) {
+  const i = YEARS - 1;
+  const yrLoadGross = 14.2 * Math.pow(1 + growth / 100, i);
+  const eeTwh = (ee * 0.7 * 8760 * 0.02) / 1e6;
+  const load2035 = Math.max(0, yrLoadGross - eeTwh);
+  const nuke = NUKE_TWH;
+  const exW = EXISTING_WIND_TWH[i];
+  const exS = EXISTING_SOLAR_TWH[i];
+  const buildYrs = Math.max(0, i - 1);
+  const geoTwh = (nGeo * buildYrs * 8760 * CF.geo) / 1e6;
+  const winTwh = (nWind * buildYrs * 8760 * CF.wind) / 1e6;
+  const solTwh = (nSolar * buildYrs * 8760 * CF.solar) / 1e6;
+  const gasBaseTwh = (gasBase * 8760 * CF.gasBase) / 1e6;
+  const gasPeakTwh = (gasPeak * 8760 * CF.gasPeak) / 1e6;
+  const coalTwh = (coal * 8760 * CF.coal) / 1e6;
+  const totalSup = nuke + exW + exS + geoTwh + winTwh + solTwh + gasBaseTwh + gasPeakTwh + coalTwh;
+  const gapTwh = Math.max(0, load2035 - totalSup);
+  const drTwh = (dr * 200) / 1e6;
+  return {
+    twh35: {
+      nuke,
+      gasBase: gasBaseTwh,
+      gasPeak: gasPeakTwh,
+      coal: coalTwh,
+      ee: eeTwh,
+      dr: drTwh,
+      exWind: exW,
+      exSolar: exS,
+      geo: geoTwh,
+      newWind: winTwh,
+      newSolar: solTwh,
+      gap: gapTwh,
+    },
+    load2035,
+  };
+}
+
 /**
  * Runs a 24-hour August peak stress test. Supply = gas (baseload always, peaker only at peak), coal, geo, solar, wind, plus battery.
- * Peaker runs only when supply (without peaker) is below the margin goal; it fills the shortfall up to peaker capacity. Battery targets margin goal.
+ * Battery fills deficits first (charge from surplus hours, discharge to deficit hours); peaker only covers remaining shortfall after battery.
  * Two-pass battery in order 0..23 with carry-over. Power limit = batt MW, energy capacity = 4h.
  */
 function runReliability(exSolarMW, exWindMW, newSolarMW, newWindMW, geo, gasBase, gasPeak, coal, ee, dr, batt, growth, marginGoalPct) {
@@ -278,6 +342,17 @@ function runReliability(exSolarMW, exWindMW, newSolarMW, newWindMW, geo, gasBase
   const marginGoal = (marginGoalPct ?? 15) / 100;
   const sol = exSolarMW + newSolarMW;
   const win = exWindMW + newWindMW;
+
+  // DR profile from headroom (supply − load): shift load toward hours with spare capacity (e.g. baseload at night, solar at midday).
+  const grossLoadByHour = Array.from({ length: 24 }, (_, h) => PROF.load[h] * peak);
+  const supplyAvail = Array.from({ length: 24 }, (_, h) =>
+    nukeMW + gasBase + coal + geo + sol * PROF.solar[h] + win * PROF.wind[h]
+  );
+  const headroom = supplyAvail.map((s, h) => s - grossLoadByHour[h]);
+  const meanHeadroom = headroom.reduce((a, b) => a + b, 0) / 24;
+  const drDev = headroom.map((hr) => meanHeadroom - hr);
+  const maxDrDev = Math.max(...drDev);
+  const drProfile = maxDrDev > 0 ? drDev.map((d) => d / maxDrDev) : Array(24).fill(0);
 
   const sim = {
     load: new Array(24),
@@ -297,33 +372,30 @@ function runReliability(exSolarMW, exWindMW, newSolarMW, newWindMW, geo, gasBase
   const surplus = new Array(24);
   const def = new Array(24);
 
-  // Pass 1: EE reduces load; DR shifts it (peak → off-peak via DR_PROF, sum=0). Net load = gross - EE - dr×DR_PROF. Target supply = net load × (1 + marginGoal).
+  // Pass 1: EE/DR; compute surplus/deficit vs target using generation only (no peaker, no battery).
+  // Battery will fill deficits first; peaker only used for what battery can't cover.
   for (let h = 0; h < 24; h++) {
     const grossLoad = PROF.load[h] * peak;
-    const netLoad = Math.max(0, grossLoad - eeFirm - dr * DR_PROF[h]);
+    const netLoad = Math.max(0, grossLoad - eeFirm - dr * drProfile[h]);
     sim.load[h] = netLoad;
     const targetSupply = netLoad * (1 + marginGoal);
     const solarMW = sol * PROF.solar[h];
-    const windMW = win * PROF.wind[h] * 0.2;
+    const windMW = win * PROF.wind[h];
     sim.exSolar[h] = exSolarMW * PROF.solar[h];
-    sim.exWind[h] = exWindMW * PROF.wind[h] * 0.2;
+    sim.exWind[h] = exWindMW * PROF.wind[h];
     sim.newSolar[h] = newSolarMW * PROF.solar[h];
-    sim.newWind[h] = newWindMW * PROF.wind[h] * 0.2;
+    sim.newWind[h] = newWindMW * PROF.wind[h];
     const supplyNoPeaker = nukeMW + gasBase + coal + geo + solarMW + windMW;
-    const shortfall = Math.max(0, targetSupply - supplyNoPeaker);
-    const peakerMW = Math.min(gasPeak, shortfall);
+    surplus[h] = Math.max(0, supplyNoPeaker - targetSupply);
+    def[h] = Math.max(0, targetSupply - supplyNoPeaker);
     sim.nuke[h] = nukeMW;
     sim.gasBase[h] = gasBase;
     sim.coal[h] = coal;
     sim.geo[h] = geo;
-    sim.peaker[h] = peakerMW;
-    const supplyNoBatt = supplyNoPeaker + peakerMW;
-    sim.supplyNoBatt[h] = supplyNoBatt;
-    surplus[h] = Math.max(0, supplyNoBatt - targetSupply);
-    def[h] = Math.max(0, targetSupply - supplyNoBatt);
+    sim.peaker[h] = 0; // set in pass 2b after battery
   }
 
-  // Pass 2a: run battery 0..23 with SoC starting at 0 to get end-of-day SoC (carry-over)
+  // Pass 2a: battery charge/discharge with surplus and def; get carry-over SoC
   let soc = 0;
   for (let h = 0; h < 24; h++) {
     if (surplus[h] > 0) {
@@ -337,7 +409,7 @@ function runReliability(exSolarMW, exWindMW, newSolarMW, newWindMW, geo, gasBase
   }
   const socCarryOver = soc;
 
-  // Pass 2b: run battery 0..23 again with initial SoC = carry-over; use this for supply/discharge and risk
+  // Pass 2b: battery again from carry-over; then peaker only for remaining shortfall after battery
   soc = socCarryOver;
   let risk = 0;
   for (let h = 0; h < 24; h++) {
@@ -350,7 +422,13 @@ function runReliability(exSolarMW, exWindMW, newSolarMW, newWindMW, geo, gasBase
       dischargeH = Math.min(def[h], batt, soc);
       soc -= dischargeH;
     }
-    sim.supply[h] = sim.supplyNoBatt[h] + dischargeH;
+    const supplyNoPeakerH = nukeMW + gasBase + coal + geo + sol * PROF.solar[h] + win * PROF.wind[h];
+    const targetH = sim.load[h] * (1 + marginGoal);
+    const shortfallAfterBatt = Math.max(0, targetH - supplyNoPeakerH - dischargeH);
+    const peakerMW = Math.min(gasPeak, shortfallAfterBatt);
+    sim.peaker[h] = peakerMW;
+    sim.supplyNoBatt[h] = supplyNoPeakerH + peakerMW;
+    sim.supply[h] = supplyNoPeakerH + peakerMW + dischargeH;
     sim.discharge[h] = dischargeH;
     if (sim.load[h] > sim.supply[h] + 10) risk++;
   }
@@ -368,38 +446,14 @@ function hourToTimeOfDay(hour) {
   return hour < 12 ? hour + 'am' : hour - 12 + 'pm';
 }
 
-/** Spacing between diagonal hatch lines (larger = lines further apart). Tile size must be a multiple. */
-const HATCH_SPACING = 14;
-
-/** Creates a repeating diagonal-line (hatch) pattern for deficit/gap fill. Lines align across tiles. */
-function createDeficitHatchPattern(ctx) {
-  // Use a tile size that is a multiple of spacing, and draw full-length diagonals so the pattern
-  // doesn't look "dashed" where it crosses tile boundaries.
-  const size = HATCH_SPACING * 4;
-  const canvas = document.createElement('canvas');
-  canvas.width = size;
-  canvas.height = size;
-  const c = canvas.getContext('2d');
-  c.setLineDash([]);
-  c.lineCap = 'butt';
-  // Align 1px strokes to the pixel grid for crisper, consistent lines.
-  c.translate(0.5, 0.5);
-  c.strokeStyle = 'rgba(229, 115, 115, 1)';
-  c.lineWidth = 1;
-  c.beginPath();
-  // 45° lines (y = x - offset). Offsets are spaced evenly and tile cleanly.
-  for (let offset = -size; offset <= size; offset += HATCH_SPACING) {
-    c.moveTo(offset, 0);
-    c.lineTo(offset + size, size);
-  }
-  c.stroke();
-  return ctx.createPattern(canvas, 'repeat');
-}
+/** Bright red for gap/deficit (top and bottom charts). */
+const GAP_DEFICIT_RED = 'rgba(220, 38, 38, 0.95)';
+const GAP_DEFICIT_BORDER = '#b91c1c';
 
 /** Spacing for new-generation diagonal hatch (single direction). */
 const CROSSHATCH_SPACING = 12;
 
-/** Creates a repeating single-direction diagonal hatch (-45°) in the given hex color. Used for new generation (opposite direction to deficit hatch). */
+/** Creates a repeating single-direction diagonal hatch (-45°) in the given hex color. Used for new generation. */
 function createCrosshatchPattern(ctx, hexColor) {
   const size = CROSSHATCH_SPACING * 3;
   const canvas = document.createElement('canvas');
@@ -424,7 +478,7 @@ function createCrosshatchPattern(ctx, hexColor) {
   return ctx.createPattern(canvas, 'repeat');
 }
 
-/** Keys for new generation (get crosshatch pattern in mix chart). */
+/** Keys for new generation (get diagonal hatch in mix and reliability charts). */
 const NEW_GENERATION_KEYS = ['newWind', 'newSolar', 'geo'];
 
 /**
@@ -432,9 +486,6 @@ const NEW_GENERATION_KEYS = ['newWind', 'newSolar', 'geo'];
  *
  * @param {Object} data - Keys match STYLES; each value is an array of length YEARS (TWh per year).
  */
-/** Washed red for deficit/gap (matches reliability chart and mix chart). */
-const DEFICIT_RED = 'rgba(229, 115, 115, 0.5)';
-
 /** Alpha for top-chart stack fill (1 = fully opaque). */
 const MIX_FILL_ALPHA = 1;
 
@@ -450,8 +501,8 @@ function drawMix(data) {
   const datasets = keys.map((k) => ({
     label: STYLES[k].l,
     data: data[k],
-    backgroundColor: k === 'gap' ? null : hexToRgba(STYLES[k].c, MIX_FILL_ALPHA),
-    borderColor: k === 'gap' ? 'rgba(229, 115, 115, 0.8)' : STYLES[k].c,
+    backgroundColor: k === 'gap' ? GAP_DEFICIT_RED : hexToRgba(STYLES[k].c, MIX_FILL_ALPHA),
+    borderColor: k === 'gap' ? GAP_DEFICIT_BORDER : STYLES[k].c,
     borderWidth: 0,
     fill: true,
     stack: 'stack0',
@@ -488,8 +539,6 @@ function drawMix(data) {
   }
 
   const ctx = document.getElementById('mixChart').getContext('2d');
-  const gapIdx = keys.indexOf('gap');
-  if (gapIdx !== -1) datasets[gapIdx].backgroundColor = createDeficitHatchPattern(ctx);
   keys.forEach((k, i) => {
     if (NEW_GENERATION_KEYS.includes(k)) datasets[i].backgroundColor = createCrosshatchPattern(ctx, STYLES[k].c);
   });
@@ -532,16 +581,16 @@ function drawMix(data) {
 /** Battery color in reliability chart (matches sidebar Firm Battery swatch). */
 const REL_BATT_COLOR = '#CE93D8';
 
-/** Reliability chart stack order and style keys (matches mix chart: existing then new, same colors). */
+/** Reliability chart stack order: nuke, coal, gas base, geo (firm, below variable), then all wind/solar, then peaker. Geothermal below all solar and wind. */
 const REL_STACK_ORDER = [
   { simKey: 'nuke', styleKey: 'nuke' },
-  { simKey: 'gasBase', styleKey: 'gasBase' },
   { simKey: 'coal', styleKey: 'coal' },
+  { simKey: 'gasBase', styleKey: 'gasBase' },
+  { simKey: 'geo', styleKey: 'geo' },
   { simKey: 'exWind', styleKey: 'exWind' },
   { simKey: 'exSolar', styleKey: 'exSolar' },
   { simKey: 'newWind', styleKey: 'newWind' },
   { simKey: 'newSolar', styleKey: 'newSolar' },
-  { simKey: 'geo', styleKey: 'geo' },
   { simKey: 'peaker', styleKey: 'gasPeak' },
 ];
 
@@ -576,8 +625,8 @@ function drawRel(rel) {
   const deficitDataset = {
     label: 'Deficit',
     data: deficit,
-    backgroundColor: null,
-    borderColor: '#b71c1c',
+    backgroundColor: GAP_DEFICIT_RED,
+    borderColor: GAP_DEFICIT_BORDER,
     borderWidth: 0,
     fill: true,
     stack: 'area',
@@ -674,7 +723,6 @@ function drawRel(rel) {
     relChartInstance.update('none');
   } else {
     const ctx = document.getElementById('relChart').getContext('2d');
-    datasets[deficitIdx].backgroundColor = createDeficitHatchPattern(ctx);
     if (stackByType) {
       REL_STACK_ORDER.forEach(({ styleKey }, i) => {
         if (NEW_GENERATION_KEYS.includes(styleKey)) {
@@ -746,11 +794,97 @@ function resetInputs() {
 }
 
 /**
- * One-click preset: set Geothermal to 180 MW/yr and Firm Battery to 1400 MW, then refresh. Reduces reliability risk with clean firm + storage.
+ * Returns the minimum supply margin % (worst hour) for the given inputs. Used by autoSolve to find a mix that hits the margin goal.
+ * Uses same getReliabilityArgs → runReliability as the chart so battery and all logic are identical.
+ */
+function getMinMarginPct(nWind, nSolar, nGeo, batt, gasBase, gasPeak, coal, ee, dr, growth, marginGoalPct) {
+  const rel = runReliability(...getReliabilityArgs(nWind, nSolar, nGeo, batt, gasBase, gasPeak, coal, ee, dr, growth, marginGoalPct));
+  let marginPct = 0;
+  for (let h = 0; h < 24; h++) {
+    const l = rel.sim.load[h];
+    if (l > 0) {
+      const m = ((rel.sim.supply[h] - l) / l) * 100;
+      if (h === 0 || m < marginPct) marginPct = m;
+    }
+  }
+  return marginPct;
+}
+
+const MARGIN_GOAL_AUTOSOLVE = 15;
+
+/**
+ * Total cost ($M) for auto-solve: same formula as UI (runFinancials with gen + battery).
+ * Energy: vol (TWh) × price ($/MWh) → $M. Battery: batt (MW) × price ($k/MW-yr) / 1000 → $M.
+ */
+function totalCostForBuild(nWind, nSolar, nGeo, batt, gasBase, gasPeak, coal, ee, dr, growth, tx) {
+  const { twh35, load2035 } = getTwh2035(nWind, nSolar, nGeo, gasBase, gasPeak, coal, ee, dr, growth);
+  const genCostM = runFinancials(twh35, tx, load2035, 0); // exclude battery; add below
+  const battPrice = PRICES.batt ?? 60;
+  const battCostM = (batt * battPrice) / 1000;
+  return genCostM + battCostM;
+}
+
+/**
+ * Auto-solve: grid over (wind, solar, geo, battery); pick the feasible combo with lowest total cost.
  */
 function autoSolve() {
-  document.getElementById('p_geo').value = 180;
-  document.getElementById('p_batt').value = 1400;
+  const gasBase = +document.getElementById('p_gas_base').value;
+  const gasPeak = +document.getElementById('p_gas_peak').value;
+  const coal = +document.getElementById('p_coal').value;
+  const ee = +document.getElementById('p_ee').value;
+  const dr = +document.getElementById('p_dr').value;
+  const growth = +document.getElementById('p_growth').value;
+  const tx = +document.getElementById('p_tx').value;
+
+  document.getElementById('p_margin_goal').value = MARGIN_GOAL_AUTOSOLVE;
+  document.getElementById('v_margin_goal').textContent = MARGIN_GOAL_AUTOSOLVE + '%';
+
+  const goal = MARGIN_GOAL_AUTOSOLVE;
+  let best = { totalCostM: Infinity, nWind: 0, nSolar: 0, nGeo: 0, batt: 0 };
+  const allFeasible = [];
+
+  const WIND_VALS = [0, 80, 160, 240, 320, 400];
+  const SOLAR_VALS = [0, 80, 160, 240, 320, 400];
+  const GEO_VALS = [0, 50, 100, 150, 200, 250, 300];
+  const BATTERY_VALS = [0, 400, 800, 1200, 1600, 2000, 2500];
+
+  for (const nWind of WIND_VALS) {
+    for (const nSolar of SOLAR_VALS) {
+      for (const nGeo of GEO_VALS) {
+        for (const batt of BATTERY_VALS) {
+          if (nWind === 0 && nSolar === 0 && nGeo === 0) continue;
+          const minMarginPct = getMinMarginPct(nWind, nSolar, nGeo, batt, gasBase, gasPeak, coal, ee, dr, growth, goal);
+          if (minMarginPct < goal) continue;
+          const totalCostM = totalCostForBuild(nWind, nSolar, nGeo, batt, gasBase, gasPeak, coal, ee, dr, growth, tx);
+          if (totalCostM < best.totalCostM) best = { totalCostM, nWind, nSolar, nGeo, batt };
+        }
+      }
+    }
+  }
+
+  // Debug table: rank most expensive → least (cheapest last = winner)
+  allFeasible.sort((a, b) => b.totalCostM - a.totalCostM);
+  const debugBody = document.getElementById('debugSolutionsBody');
+  if (debugBody) {
+    debugBody.innerHTML = allFeasible
+      .map((s, i) => `<tr${s.totalCostM === best.totalCostM ? ' class="debug-winner"' : ''}>
+        <td>${i + 1}</td>
+        <td>${s.nWind}</td>
+        <td>${s.nSolar}</td>
+        <td>${s.nGeo}</td>
+        <td>${s.batt}</td>
+        <td>$${Math.round(s.totalCostM)}</td>
+        <td>${s.minMarginPct.toFixed(1)}%</td>
+      </tr>`)
+      .join('');
+  }
+
+  if (best.totalCostM === Infinity) best = { nWind: 0, nSolar: 0, nGeo: 0, batt: 0, totalCostM: 0 };
+
+  document.getElementById('p_wind').value = best.nWind;
+  document.getElementById('p_solar').value = best.nSolar;
+  document.getElementById('p_geo').value = best.nGeo;
+  document.getElementById('p_batt').value = best.batt;
   update();
 }
 

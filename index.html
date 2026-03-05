@@ -10,7 +10,7 @@
 
 <div class="wrap">
   <header>
-    <h1>AE Dashboard v35.1</h1>
+    <h1>Austin Energy Power Simulator</h1>
   </header>
 
   <div class="kpi-bar">
@@ -109,7 +109,7 @@
       <div class="row">
         <div class="row-head">
           <span class="swatch" style="background: #14b8a6"></span>
-          <span class="lbl has-tooltip" title="Shifts load from evening (low solar) toward midday solar peak; smooth profile, total energy unchanged. Approximate representation of shift-to-solar DR.">Demand Response (MW)</span>
+          <span class="lbl has-tooltip" title="Shifts load toward hours when generation is higher (based on your current mix: solar, wind, gas, etc.). Smooth profile, total energy unchanged.">Demand Response (MW)</span>
         </div>
         <div class="slider-wrap"><input type="range" id="p_dr" min="0" max="1200" value="0"></div>
         <span class="val" id="v_dr">0</span>
@@ -133,12 +133,12 @@
         <span class="val" id="v_growth">1.5%</span>
       </div>
       <button class="btn-reset" onclick="resetInputs()">Reset</button>
-      <button class="btn-solve" onclick="autoSolve()">Auto-Solve Reliability Gap</button>
+      <button class="btn-solve has-tooltip" onclick="autoSolve()" title="Scale New Wind, New Solar, Geothermal, and Battery until the minimum supply margin reaches 15%. Works for any load growth.">Auto-Solve Reliability Gap</button>
     </div>
 
     <div>
       <div class="card">
-        <h3 class="has-tooltip" title="Stacked area chart: supply by resource (nuclear, gas, coal, wind, solar, geo, EE, gap) and total load (Usage line) over the planning horizon. Gap = shortfall met by market purchases.">11-Year Energy Mix Stack (TWh)</h3>
+        <h3 class="has-tooltip" title="Stacked area chart: supply by resource (nuclear, gas, coal, wind, solar, geo, EE, gap) and total load (Usage line) over the planning horizon. Gap = shortfall met by market purchases.">Austin Energy Resource Mix (TWh)</h3>
         <div class="chart-box"><canvas id="mixChart"></canvas></div>
       </div>
       <div class="card">
@@ -159,7 +159,7 @@
         <thead>
           <tr>
             <th class="fin-resource">Resource</th>
-            <th>Vol (TWh)</th>
+            <th>Vol</th>
             <th>Base ($)</th>
             <th>Tx Adder ($)</th>
             <th>Total ($M)</th>
@@ -176,6 +176,26 @@
           </tr>
         </tfoot>
       </table>
+    </div>
+    <div class="card">
+      <h3>Debug: Auto-Solve Solutions (most expensive → least)</h3>
+      <p class="text-muted">Populated when you click Auto-Solve. All feasible mixes meeting the margin goal.</p>
+      <div class="debug-table-wrap">
+        <table class="fin-table" id="debugSolutionsTable">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Wind</th>
+              <th>Solar</th>
+              <th>Geo</th>
+              <th>Batt</th>
+              <th>Cost ($M)</th>
+              <th>Min margin %</th>
+            </tr>
+          </thead>
+          <tbody id="debugSolutionsBody"></tbody>
+        </table>
+      </div>
     </div>
   </div>
 </div>

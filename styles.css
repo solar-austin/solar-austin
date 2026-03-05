@@ -358,6 +358,46 @@ td:first-child {
   margin-top: 5px;
 }
 
+#assumptions_card {
+  margin-top: 10px;
+}
+
+.assumptions-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.assumption-item {
+  border: 1px solid #ececec;
+  border-radius: 6px;
+  background: #fafafa;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.assumption-item span {
+  font-size: 10px;
+  text-transform: uppercase;
+  color: #666;
+  letter-spacing: 0.02em;
+  font-weight: 700;
+}
+
+.assumption-item strong {
+  font-size: 13px;
+  color: #222;
+}
+
+@media (max-width: 900px) {
+  .assumptions-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 .fin-table th.fin-resource {
   width: 25%;
 }
@@ -392,4 +432,20 @@ td:first-child {
 .good-bg {
   background: #e8f5e9;
   border-color: #66bb6a;
+}
+
+.text-muted {
+  color: #666;
+  font-size: 13px;
+  margin: 0 0 10px;
+}
+
+.debug-table-wrap {
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.debug-winner {
+  background: #e8f5e9;
+  font-weight: 600;
 }
