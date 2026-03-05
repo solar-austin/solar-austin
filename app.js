@@ -369,7 +369,7 @@ function runReliability(exSolarMW, exWindMW, newSolarMW, newWindMW, geo, gasBase
     peaker: new Array(24),
     discharge: new Array(24),
   };
-  const surplus = new Array(24);
+  const chargeHeadroom = new Array(24);
   const def = new Array(24);
 
   // Pass 1: EE/DR; compute surplus/deficit vs target using generation only (no peaker, no battery).
@@ -386,35 +386,21 @@ function runReliability(exSolarMW, exWindMW, newSolarMW, newWindMW, geo, gasBase
     sim.newSolar[h] = newSolarMW * PROF.solar[h];
     sim.newWind[h] = newWindMW * PROF.wind[h];
     const supplyNoPeaker = nukeMW + gasBase + coal + geo + solarMW + windMW;
-    surplus[h] = Math.max(0, supplyNoPeaker - targetSupply);
+    // Charge from real excess above load (not above reserve target), so storage can cycle daily.
+    chargeHeadroom[h] = Math.max(0, supplyNoPeaker - netLoad);
     def[h] = Math.max(0, targetSupply - supplyNoPeaker);
     sim.nuke[h] = nukeMW;
     sim.gasBase[h] = gasBase;
     sim.coal[h] = coal;
     sim.geo[h] = geo;
-    sim.peaker[h] = 0; // set in pass 2b after battery
+    sim.peaker[h] = 0; // set in pass 2 after battery
   }
-
-  // Pass 2a: battery charge/discharge with surplus and def; get carry-over SoC
+  // Pass 2: start stress day with empty battery, then dispatch battery before peaker each hour.
   let soc = 0;
-  for (let h = 0; h < 24; h++) {
-    if (surplus[h] > 0) {
-      const charge = Math.min(surplus[h], batt, E_cap - soc);
-      soc += charge;
-    }
-    if (def[h] > 0) {
-      const dischargeH = Math.min(def[h], batt, soc);
-      soc -= dischargeH;
-    }
-  }
-  const socCarryOver = soc;
-
-  // Pass 2b: battery again from carry-over; then peaker only for remaining shortfall after battery
-  soc = socCarryOver;
   let risk = 0;
   for (let h = 0; h < 24; h++) {
-    if (surplus[h] > 0) {
-      const charge = Math.min(surplus[h], batt, E_cap - soc);
+    if (chargeHeadroom[h] > 0) {
+      const charge = Math.min(chargeHeadroom[h], batt, E_cap - soc);
       soc += charge;
     }
     let dischargeH = 0;
@@ -817,13 +803,20 @@ const MARGIN_GOAL_AUTOSOLVE = 15;
  * Energy: vol (TWh) × price ($/MWh) → $M. Battery: batt (MW) × price ($k/MW-yr) / 1000 → $M.
  */
 function totalCostForBuild(nWind, nSolar, nGeo, batt, gasBase, gasPeak, coal, ee, dr, growth, tx) {
-  const { twh35, load2035 } = getTwh2035(nWind, nSolar, nGeo, gasBase, gasPeak, coal, ee, dr, growth);
-  const genCostM = runFinancials(twh35, tx, load2035, 0); // exclude battery; add below
+  const { twh35 } = getTwh2035(nWind, nSolar, nGeo, gasBase, gasPeak, coal, ee, dr, growth);
+  const remoteKeys = new Set(['nuke', 'coal', 'exWind', 'exSolar', 'newWind', 'newSolar', 'gap']);
+  let genCostM = 0;
+
+  Object.entries(twh35).forEach(([k, vol]) => {
+    const baseP = PRICES[k] ?? 0;
+    const add = remoteKeys.has(k) ? tx : 0;
+    genCostM += (vol * MWH_PER_TWH * (baseP + add)) / DOLLARS_PER_MILLION;
+  });
+
   const battPrice = PRICES.batt ?? 60;
   const battCostM = (batt * battPrice) / 1000;
   return genCostM + battCostM;
 }
-
 /**
  * Auto-solve: grid over (wind, solar, geo, battery); pick the feasible combo with lowest total cost.
  */
@@ -843,26 +836,27 @@ function autoSolve() {
   let best = { totalCostM: Infinity, nWind: 0, nSolar: 0, nGeo: 0, batt: 0 };
   const allFeasible = [];
 
-  const WIND_VALS = [0, 80, 160, 240, 320, 400];
-  const SOLAR_VALS = [0, 80, 160, 240, 320, 400];
-  const GEO_VALS = [0, 50, 100, 150, 200, 250, 300];
-  const BATTERY_VALS = [0, 400, 800, 1200, 1600, 2000, 2500];
+  const WIND_VALS = Array.from({ length: 11 }, (_, i) => i * 40);
+  const SOLAR_VALS = Array.from({ length: 11 }, (_, i) => i * 40);
+  const GEO_VALS = Array.from({ length: 9 }, (_, i) => i * 50);
+  const BATTERY_VALS = [...Array.from({ length: 13 }, (_, i) => i * 200), 2500];
 
   for (const nWind of WIND_VALS) {
     for (const nSolar of SOLAR_VALS) {
       for (const nGeo of GEO_VALS) {
         for (const batt of BATTERY_VALS) {
-          if (nWind === 0 && nSolar === 0 && nGeo === 0) continue;
           const minMarginPct = getMinMarginPct(nWind, nSolar, nGeo, batt, gasBase, gasPeak, coal, ee, dr, growth, goal);
-          if (minMarginPct < goal) continue;
+          if (minMarginPct + 1e-9 < goal) continue;
+
           const totalCostM = totalCostForBuild(nWind, nSolar, nGeo, batt, gasBase, gasPeak, coal, ee, dr, growth, tx);
+          allFeasible.push({ nWind, nSolar, nGeo, batt, totalCostM, minMarginPct });
           if (totalCostM < best.totalCostM) best = { totalCostM, nWind, nSolar, nGeo, batt };
         }
       }
     }
   }
 
-  // Debug table: rank most expensive → least (cheapest last = winner)
+  // Debug table: rank most expensive -> least (cheapest last = winner)
   allFeasible.sort((a, b) => b.totalCostM - a.totalCostM);
   const debugBody = document.getElementById('debugSolutionsBody');
   if (debugBody) {
@@ -887,7 +881,8 @@ function autoSolve() {
   document.getElementById('p_batt').value = best.batt;
   update();
 }
-
 // --- Init (runs when script loads; DOM ready because script is at end of body) ---
 document.querySelectorAll('input').forEach((i) => (i.oninput = update));
 window.addEventListener('load', update);
+
+
