@@ -16,7 +16,7 @@ const BASE_YEAR = 2025;
 const CF = { wind: 0.35, solar: 0.25, geo: 0.9, gasBase: 0.5, gasPeak: 0.08, coal: 0.6, nuke: 0.9 };
 
 /** Wholesale or proxy energy prices ($/MWh) for energy rows; batt is $k/MW-year for capacity. */
-const PRICES = { nuke: 35, gasBase: 55, gasPeak: 95, coal: 45, ee: 25, dr: 25, exWind: 28, exSolar: 24, newWind: 48, newSolar: 36, geo: 85, gap: 120, batt: 60 };
+const PRICES = { nuke: 35, gasBase: 55, gasPeak: 95, coal: 45, ee: 25, dr: 25, exWind: 28, exSolar: 24, newWind: 48, newSolar: 36, geo: 85, gap: 120, batt: 120 };
 
 // Cost units: vol (TWh) × price ($/MWh) → 1 TWh = 1e6 MWh, so cost ($) = vol × 1e6 × price, cost ($M) = vol × price.
 const MWH_PER_TWH = 1e6;
@@ -61,15 +61,54 @@ const PROF = {
 /** Nuclear TWh (constant in mix). Used to derive baseload MW in reliability so both use same assumption. */
 const NUKE_TWH = 3.4;
 
-/** Existing wind/solar TWh in year 10 (2035) for reliability MW conversion. */
-const EXISTING_SOLAR_TWH_2035 = 2.0;
-const EXISTING_WIND_TWH_2035 = 3.7;
+/** Existing solar contracts from the provided chart (MW, contract expiration year). */
+const EXISTING_SOLAR_FLEET = [
+  { name: 'Webberville Solar Project', mw: 30, expires: 2036 },
+  { name: 'Roserock', mw: 157.5, expires: 2036 },
+  { name: 'East Pecos (Bootleg)', mw: 118.5, expires: 2031 },
+  { name: 'Upton County (SPTX12B1)', mw: 157.5, expires: 2042 },
+  { name: 'Waymark', mw: 178.5, expires: 2043 },
+  { name: 'East Blacklands', mw: 144, expires: 2036 },
+  { name: 'SE Aragon', mw: 180, expires: 2036 },
+];
+
+/** Existing wind contracts from the provided chart (MW, contract expiration year). */
+const EXISTING_WIND_FLEET = [
+  { name: 'Whirlwind Energy Center', mw: 59.8, expires: 2027 },
+  { name: 'Hackberry Wind Project', mw: 165.6, expires: 2023 },
+  { name: 'Los Vientos II', mw: 201.6, expires: 2037 },
+  { name: 'Whitetail', mw: 92.3, expires: 2037 },
+  { name: 'Los Vientos III', mw: 200, expires: 2040 },
+  { name: 'Jumbo Road', mw: 299.7, expires: 2033 },
+  { name: 'Los Vientos IV', mw: 200, expires: 2041 },
+  { name: 'Karankawa', mw: 206.64, expires: 2034 },
+  { name: 'Raymond', mw: 200, expires: 2032 },
+  { name: 'Gulf Wind', mw: 170, expires: 2041 },
+];
+
+/** Treat expiration as active through that year; unit phases out starting the next year. */
+function isAssetActiveInYear(asset, year) {
+  return asset.expires == null || year <= asset.expires;
+}
+
+/** Build existing-fleet annual TWh over the planning horizon from MW + contract expirations. */
+function buildExistingTwhByYear(fleet, cf) {
+  return Array.from({ length: YEARS }, (_, i) => {
+    const year = BASE_YEAR + i;
+    const activeMw = fleet.reduce((sum, asset) => sum + (isAssetActiveInYear(asset, year) ? asset.mw : 0), 0);
+    return (activeMw * 8760 * cf) / 1e6;
+  });
+}
+
+/** Existing wind/solar TWh by year (2025..2035), derived directly from contract expirations. */
+const EXISTING_WIND_TWH = buildExistingTwhByYear(EXISTING_WIND_FLEET, CF.wind);
+const EXISTING_SOLAR_TWH = buildExistingTwhByYear(EXISTING_SOLAR_FLEET, CF.solar);
 const BUILD_YRS_TOTAL = 9;
 
 /** Build exact args for runReliability so chart and getMinMarginPct use identical inputs. */
 function getReliabilityArgs(nWind, nSolar, nGeo, batt, gasBase, gasPeak, coal, ee, dr, growth, marginGoalPct) {
-  const exSolarMW = (EXISTING_SOLAR_TWH_2035 * 1e6) / (8760 * CF.solar);
-  const exWindMW = (EXISTING_WIND_TWH_2035 * 1e6) / (8760 * CF.wind);
+  const exSolarMW = (EXISTING_SOLAR_TWH[YEARS - 1] * 1e6) / (8760 * CF.solar);
+  const exWindMW = (EXISTING_WIND_TWH[YEARS - 1] * 1e6) / (8760 * CF.wind);
   return [
     exSolarMW,
     exWindMW,
@@ -127,10 +166,8 @@ function update() {
     const yrLoad = Math.max(0, yrLoadGross - eeTwh);
     data.load.push(yrLoad);
     const nuke = NUKE_TWH;
-    // Existing wind TWh by year (year index 0..10); reflects retirements/curtailment over time.
-    const exW = [5.3, 5.3, 4.5, 4.5, 4.5, 4.5, 3.9, 3.8, 3.7, 3.7, 3.7][i];
-    // Existing solar TWh by year (year index 0..10); declines slightly in later years.
-    const exS = [2.4, 2.4, 2.4, 2.4, 2.4, 2.4, 2.3, 2.3, 2.3, 2.3, 2.0][i];
+    const exW = EXISTING_WIND_TWH[i];
+    const exS = EXISTING_SOLAR_TWH[i];
 
     const buildYrs = Math.max(0, i - 1);
     const geoTwh = (nGeo * buildYrs * 8760 * CF.geo) / 1e6;
@@ -253,7 +290,7 @@ function runFinancials(twh, txAdder, loadTWh, battMW) {
 
   // Battery row: capacity (MW), base price $k/MW-year → cost $M = (batt × price_$k) / 1000
   const batt = battMW ?? 0;
-  const battPrice = PRICES.batt ?? 60; // $k per MW per year
+  const battPrice = PRICES.batt ?? 120; // $k per MW per year
   const battCostM = (batt * battPrice) / 1000;
   tot += battCostM;
   const battColor = STYLES.batt?.c ?? '#CE93D8';
@@ -284,10 +321,6 @@ window.setPrice = function (key, value) {
   if (!Number.isNaN(v) && PRICES[key] !== undefined) PRICES[key] = v;
   update();
 };
-
-/** Existing wind/solar TWh by year (year index 0..10). Used by getTwh2035. */
-const EXISTING_WIND_TWH = [5.3, 5.3, 4.5, 4.5, 4.5, 4.5, 3.9, 3.8, 3.7, 3.7, 3.7];
-const EXISTING_SOLAR_TWH = [2.4, 2.4, 2.4, 2.4, 2.4, 2.4, 2.3, 2.3, 2.3, 2.3, 2.0];
 
 /**
  * Returns 2035 TWh by resource and load for the given build/assumptions. Used by autoSolve to compute cost.
@@ -796,8 +829,6 @@ function getMinMarginPct(nWind, nSolar, nGeo, batt, gasBase, gasPeak, coal, ee, 
   return marginPct;
 }
 
-const MARGIN_GOAL_AUTOSOLVE = 15;
-
 /**
  * Total cost ($M) for auto-solve: same formula as UI (runFinancials with gen + battery).
  * Energy: vol (TWh) × price ($/MWh) → $M. Battery: batt (MW) × price ($k/MW-yr) / 1000 → $M.
@@ -813,7 +844,7 @@ function totalCostForBuild(nWind, nSolar, nGeo, batt, gasBase, gasPeak, coal, ee
     genCostM += (vol * MWH_PER_TWH * (baseP + add)) / DOLLARS_PER_MILLION;
   });
 
-  const battPrice = PRICES.batt ?? 60;
+  const battPrice = PRICES.batt ?? 120;
   const battCostM = (batt * battPrice) / 1000;
   return genCostM + battCostM;
 }
@@ -828,11 +859,7 @@ function autoSolve() {
   const dr = +document.getElementById('p_dr').value;
   const growth = +document.getElementById('p_growth').value;
   const tx = +document.getElementById('p_tx').value;
-
-  document.getElementById('p_margin_goal').value = MARGIN_GOAL_AUTOSOLVE;
-  document.getElementById('v_margin_goal').textContent = MARGIN_GOAL_AUTOSOLVE + '%';
-
-  const goal = MARGIN_GOAL_AUTOSOLVE;
+  const goal = +document.getElementById('p_margin_goal').value;
   let best = { totalCostM: Infinity, nWind: 0, nSolar: 0, nGeo: 0, batt: 0 };
   const allFeasible = [];
 
