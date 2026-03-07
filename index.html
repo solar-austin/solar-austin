@@ -16,7 +16,7 @@
   <div class="kpi-bar">
     <div class="kpi">
       <div class="kpi-val" id="k_rate">0.0¢</div>
-      <div class="kpi-lbl"><span class="has-tooltip" title="Average cost of generation in 2035: total system cost (all resources including market gap) divided by 2035 load, in cents per kWh. Based on base $/MWh and TCOS adder for remote resources.">Est. Gen Rate</span></div>
+      <div class="kpi-lbl"><span class="has-tooltip" title="Average cost of generation in 2035: total system cost (all resources including market gap) divided by 2035 load, in cents per kWh. Based on base $/MWh and TCOS adder for remote resources.">Est. Gen Rate (2035)</span></div>
     </div>
     <div class="kpi">
       <div class="kpi-val" id="k_clean">0%</div>
@@ -27,7 +27,7 @@
       <div class="kpi-lbl"><span class="has-tooltip" title="Worst-hour cushion on the August peak day: the minimum over 24 hours of (supply − load) / load, as a percent. Positive = headroom; negative = at least one deficit hour. Green when at or above goal.">Supply Margin</span></div>
       <div class="kpi-goal">
         <label class="kpi-goal-lbl">Goal</label>
-        <input type="range" id="p_margin_goal" min="0" max="30" step="1" value="15" class="kpi-goal-slider">
+        <input type="range" id="p_margin_goal" min="0" max="30" step="1" value="15" class="kpi-goal-slider" data-default="15" data-snap="false">
         <span class="kpi-goal-val" id="v_margin_goal">15%</span>
       </div>
     </div>
@@ -38,115 +38,177 @@
   </div>
 
   <div class="grid-main">
-    <div class="card">
+    <div class="card inputs-card">
       <h3>Inputs</h3>
 
-      <h4 class="input-section">Sources</h4>
+      <h4 class="input-section input-section-with-target"><span>Carbon Free</span><span class="inputs-values-header-inline">2035 target</span></h4>
       <div class="row">
         <div class="row-head">
           <span class="swatch" style="background: #4FC3F7"></span>
-          <span class="lbl has-tooltip" title="New wind capacity added each year (MW/yr). Builds over the 11-year horizon; chart shows total MW by 2035.">New Wind</span>
+          <span class="lbl has-tooltip" title="Total wind power in 2035 (MW), including existing contracts. New wind in 2035 is total wind minus existing wind in 2035.">Wind</span>
         </div>
-        <div class="slider-wrap"><input type="range" id="p_wind" min="0" max="400" value="100"></div>
-        <span class="val" id="v_wind">100 MW/yr</span>
+        <div class="slider-wrap"><input type="range" id="p_wind" min="864" max="5000" value="1631" data-default="1631"></div>
+        <span class="val" id="v_wind">1630 MW</span>
       </div>
       <div class="row">
         <div class="row-head">
           <span class="swatch" style="background: #E09328"></span>
-          <span class="lbl has-tooltip" title="New solar capacity added each year (MW/yr). Builds over the 11-year horizon; chart shows total MW by 2035.">New Solar</span>
+          <span class="lbl has-tooltip" title="Total utility solar power in 2035 (MW), including existing contracts after degradation. New utility solar in 2035 is total utility solar minus existing utility solar in 2035.">Utility Solar</span>
         </div>
-        <div class="slider-wrap"><input type="range" id="p_solar" min="0" max="400" value="150"></div>
-        <span class="val" id="v_solar">150 MW/yr</span>
+        <div class="slider-wrap"><input type="range" id="p_solar" min="806" max="5000" value="967" data-default="967"></div>
+        <span class="val" id="v_solar">966 MW</span>
+      </div>
+      <div class="row">
+        <div class="row-head">
+          <span class="swatch" style="background: #C9852F"></span>
+          <span class="lbl has-tooltip" title="Total distributed solar power in 2035 (MW). Annual additions are calculated versus the 2025 baseline of 188 MW.">Distributed Solar</span>
+        </div>
+        <div class="slider-wrap"><input type="range" id="p_dist_solar" min="0" max="3000" value="188" data-default="188"></div>
+        <span class="val" id="v_dist_solar">188 MW</span>
       </div>
       <div class="row">
         <div class="row-head">
           <span class="swatch" style="background: #A1887F"></span>
-          <span class="lbl has-tooltip" title="New geothermal capacity added each year (MW/yr). Firm, dispatchable resource; builds over the horizon.">Geothermal</span>
+          <span class="lbl has-tooltip" title="Total geothermal power in 2035 (MW). Geothermal additions are spread as a constant annual build to reach this value by 2035.">Geothermal</span>
         </div>
-        <div class="slider-wrap"><input type="range" id="p_geo" min="0" max="400" value="50"></div>
-        <span class="val" id="v_geo">50 MW/yr</span>
+        <div class="slider-wrap"><input type="range" id="p_geo" min="0" max="3600" value="0" data-default="0"></div>
+        <span class="val" id="v_geo">0 MW</span>
       </div>
       <div class="row">
         <div class="row-head">
-          <span class="swatch" style="background: #CE93D8"></span>
-          <span class="lbl has-tooltip" title="4-hour battery capacity (MW nameplate). Charges on surplus, discharges on shortfall during the August peak stress test.">Firm Battery (MW)</span>
+          <span class="swatch" style="background: #B0BEC5"></span>
+          <span class="lbl has-tooltip" title="Nuclear capacity available every hour (MW). Modeled as a high-capacity-factor firm resource in 2035.">Nuclear</span>
         </div>
-        <div class="slider-wrap"><input type="range" id="p_batt" min="0" max="2500" value="500"></div>
-        <span class="val" id="v_batt">500</span>
+        <div class="slider-wrap"><input type="range" id="p_nuke" min="0" max="1500" value="430" data-default="430"></div>
+        <span class="val" id="v_nuke">430 MW</span>
       </div>
+      <h4 class="input-section">Fossil Fuels</h4>
       <div class="row">
         <div class="row-head">
           <span class="swatch" style="background: #90A4AE"></span>
-          <span class="lbl has-tooltip" title="Gas combined-cycle capacity (MW) available every hour. Runs as baseload in this model.">Gas – Baseload (MW)</span>
+          <span class="lbl has-tooltip" title="Gas combined-cycle capacity (MW) available every hour. Runs as baseload in this model.">Gas - Baseload</span>
         </div>
-        <div class="slider-wrap"><input type="range" id="p_gas_base" min="0" max="1500" value="300"></div>
+        <div class="slider-wrap"><input type="range" id="p_gas_base" min="0" max="1500" value="300" data-default="300"></div>
         <span class="val" id="v_gas_base">300</span>
       </div>
       <div class="row">
         <div class="row-head">
           <span class="swatch" style="background: #607D8B"></span>
-          <span class="lbl has-tooltip" title="Gas peaker capacity (MW). Dispatched only when supply is below the margin goal; fills the shortfall up to this capacity.">Gas – Peaker (MW)</span>
+          <span class="lbl has-tooltip" title="Gas peaker capacity (MW). Dispatched only when supply is below the margin goal; fills the shortfall up to this capacity.">Gas - Peaker</span>
         </div>
-        <div class="slider-wrap"><input type="range" id="p_gas_peak" min="0" max="1500" value="200"></div>
+        <div class="slider-wrap"><input type="range" id="p_gas_peak" min="0" max="1500" value="200" data-default="200"></div>
         <span class="val" id="v_gas_peak">200</span>
       </div>
       <div class="row">
         <div class="row-head">
           <span class="swatch" style="background: #5D4037"></span>
-          <span class="lbl has-tooltip" title="Coal capacity (MW) available every hour. Set to 0 for a coal-free scenario.">Coal (MW)</span>
+          <span class="lbl has-tooltip" title="Coal capacity (MW) available every hour. Set to 0 for a coal-free scenario.">Coal</span>
         </div>
-        <div class="slider-wrap"><input type="range" id="p_coal" min="0" max="2000" value="0"></div>
+        <div class="slider-wrap"><input type="range" id="p_coal" min="0" max="2000" value="0" data-default="0"></div>
         <span class="val" id="v_coal">0</span>
+      </div>
+      <h4 class="input-section">Capacity Management</h4>
+      <div class="row">
+        <div class="row-head">
+          <span class="swatch" style="background: #CE93D8"></span>
+          <span class="lbl has-tooltip" title="4-hour battery capacity (MW nameplate). Charges on surplus, discharges on shortfall during the August peak stress test.">Firm Battery</span>
+        </div>
+        <div class="slider-wrap"><input type="range" id="p_batt" min="0" max="2500" value="500" data-default="500"></div>
+        <span class="val" id="v_batt">500</span>
       </div>
       <div class="row">
         <div class="row-head">
           <span class="swatch" style="background: #2dd4bf"></span>
-          <span class="lbl has-tooltip" title="Programs that reduce total electricity use (e.g. efficient lighting, HVAC). Modeled as a flat reduction in load (MW) every hour and in annual TWh.">Energy Efficiency (MW)</span>
+          <span class="lbl has-tooltip" title="Programs that reduce total electricity use (e.g. efficient lighting, HVAC). Modeled as a flat reduction in load (MW) every hour and in annual TWh.">Energy Efficiency</span>
         </div>
-        <div class="slider-wrap"><input type="range" id="p_ee" min="0" max="1200" value="0"></div>
+        <div class="slider-wrap"><input type="range" id="p_ee" min="0" max="1200" value="0" data-default="0"></div>
         <span class="val" id="v_ee">0</span>
       </div>
       <div class="row">
         <div class="row-head">
           <span class="swatch" style="background: #14b8a6"></span>
-          <span class="lbl has-tooltip" title="Shifts load toward hours when generation is higher (based on your current mix: solar, wind, gas, etc.). Smooth profile, total energy unchanged.">Demand Response (MW)</span>
+          <span class="lbl has-tooltip" title="Shifts load toward hours when generation is higher (based on your current mix: solar, wind, gas, etc.). Smooth profile, total energy unchanged.">Demand Response</span>
         </div>
-        <div class="slider-wrap"><input type="range" id="p_dr" min="0" max="1200" value="0"></div>
+        <div class="slider-wrap"><input type="range" id="p_dr" min="0" max="1200" value="0" data-default="0"></div>
         <span class="val" id="v_dr">0</span>
+      </div>
+      <div class="row row-readout">
+        <div class="row-head">
+          <span class="lbl has-tooltip" title="Total effective generation power in 2035 (MW), excluding battery. Includes nuclear, gas, coal, wind, solar, and geothermal.">2035 Power Sum (No Battery)</span>
+        </div>
+        <span class="val" id="v_total_mw_2035">0 MW</span>
       </div>
 
       <h4 class="input-section">Assumptions</h4>
       <div class="row">
         <div class="row-head">
           <span class="swatch" style="background: var(--accent)"></span>
-          <span class="lbl has-tooltip" title="Transmission cost of service adder ($/MWh) applied to remote resources (nuclear, coal, wind, solar, gap) in the financial table and gen rate.">TCOS Adder ($)</span>
+          <span class="lbl has-tooltip" title="Transmission cost of service adder ($/MWh) applied to remote resources (nuclear, coal, wind, solar, gap) in the financial table and gen rate.">TCOS Adder</span>
         </div>
-        <div class="slider-wrap"><input type="range" id="p_tx" min="0" max="80" value="40"></div>
+        <div class="slider-wrap"><input type="range" id="p_tx" min="0" max="80" value="40" data-default="40" data-snap="false"></div>
         <span class="val" id="v_tx">$40</span>
       </div>
       <div class="row">
         <div class="row-head">
           <span class="swatch" style="background: #B0BEC5"></span>
-          <span class="lbl has-tooltip" title="Annual load growth rate (%) applied over the 11-year horizon. Affects both the mix chart and the August peak stress test.">Growth (%)</span>
+          <span class="lbl has-tooltip" title="Annual load growth rate (%) applied over the 11-year horizon. Affects both the mix chart and the August peak stress test.">Growth</span>
         </div>
-        <div class="slider-wrap"><input type="range" id="p_growth" min="0" max="5" step="0.1" value="1.5"></div>
+        <div class="slider-wrap"><input type="range" id="p_growth" min="0" max="5" step="0.1" value="1.5" data-default="1.5" data-snap="false"></div>
         <span class="val" id="v_growth">1.5%</span>
       </div>
+
+      <h4 class="input-section">UI Options</h4>
+      <div class="row">
+        <div class="row-head">
+          <span class="swatch" style="background: #666"></span>
+          <span class="lbl has-tooltip" title="Debug control for graph shade. Lower values are darker fills, higher values are lighter fills.">Graph Shade</span>
+        </div>
+        <div class="slider-wrap"><input type="range" id="p_graph_shade" min="0" max="100" step="1" value="25" data-default="25" data-snap="false"></div>
+        <span class="val" id="v_graph_shade">25%</span>
+      </div>
+      <div class="row">
+        <div class="row-head">
+          <span class="swatch" style="background: #777"></span>
+          <span class="lbl has-tooltip" title="Debug control for diagonal-line spacing in textures. Lower values pack lines closer together.">Line Separation</span>
+        </div>
+        <div class="slider-wrap"><input type="range" id="p_line_sep" min="1" max="24" step="1" value="5" data-default="5" data-snap="false"></div>
+        <span class="val" id="v_line_sep">5 px</span>
+      </div>
+      <div class="row">
+        <div class="row-head">
+          <span class="swatch" style="background: #888"></span>
+          <span class="lbl has-tooltip" title="Controls texture intensity for hatched areas. 0 = off, 100 = full strength.">Hatch Strength</span>
+        </div>
+        <div class="slider-wrap"><input type="range" id="p_hatch_strength" min="0" max="100" step="1" value="50" data-default="50" data-snap="false"></div>
+        <span class="val" id="v_hatch_strength">50%</span>
+      </div>
+      <label class="left-toggle">
+        <input type="checkbox" id="p_graph_hover" checked onchange="update()">
+        <span class="has-tooltip" title="Enable or disable chart hover details (tooltips and hover tracking) on both graphs.">Enable graph hover details</span>
+      </label>
       <button class="btn-reset" onclick="resetInputs()">Reset</button>
-      <button class="btn-solve has-tooltip" onclick="autoSolve()" title="Scale New Wind, New Solar, Geothermal, and Battery until the minimum supply margin reaches 15%. Works for any load growth.">Auto-Solve Reliability Gap</button>
+      <button class="btn-solve has-tooltip" onclick="autoSolve()" title="Scale New Wind, New Utility Solar, Geothermal, and Battery until the minimum supply margin reaches 15%. Works for any load growth.">Auto-Solve Reliability Gap</button>
     </div>
 
     <div>
       <div class="card">
-        <h3 class="has-tooltip" title="Stacked area chart: supply by resource (nuclear, gas, coal, wind, solar, geo, EE, gap) and total load (Usage line) over the planning horizon. Gap = shortfall met by market purchases.">Austin Energy Resource Mix (TWh)</h3>
+        <div class="chart-head">
+          <h3 class="has-tooltip" title="Stacked area chart: supply by resource (nuclear, gas, coal, wind, solar, geo, EE, gap) and total load (Usage line) over the planning horizon. Gap = shortfall met by market purchases.">Austin Energy Resource Mix (<span id="mix_units_lbl">TWh</span>)</h3>
+          <label class="rel-chart-toggle">
+            <input type="checkbox" id="mix_units_mw" onchange="update()">
+            <span class="has-tooltip" title="Switch top-chart units. TWh = annual energy. Nameplate MW = resource nameplate/effective MW by year; market gap is hidden in this mode.">Show Nameplate MW</span>
+          </label>
+        </div>
         <div class="chart-box"><canvas id="mixChart"></canvas></div>
       </div>
       <div class="card">
-        <h3 class="has-tooltip" title="Simulated August peak day: 24-hour supply vs load (MW). Shows whether the system meets load with the target margin; deficit (red) and risk hours indicate shortfalls.">August Peak Reliability (24-Hour Stress Test)</h3>
-        <label class="rel-chart-toggle has-tooltip" title="When checked, supply is broken down by resource (same colors as chart 1). When unchecked, a single Generation + Peaker view is shown.">
-          <input type="checkbox" id="rel_stack_by_type" checked onchange="update()">
-          <span>Split by resource type</span>
-        </label>
+        <div class="chart-head">
+          <h3 class="has-tooltip" title="Simulated August peak day: 24-hour supply vs load (MW). Shows whether the system meets load with the margin goal; deficit (red) and risk hours indicate shortfalls.">August Peak Reliability (24-Hour Stress Test)</h3>
+          <label class="rel-chart-toggle">
+            <input type="checkbox" id="rel_stack_by_type" checked onchange="update()">
+            <span class="has-tooltip" title="Applies to both charts. Checked: split by resource type. Unchecked: combine into Existing Power and New Generation.">Split by resource type</span>
+          </label>
+        </div>
         <div class="chart-box-sm"><canvas id="relChart"></canvas></div>
       </div>
     </div>
@@ -184,4 +246,5 @@
 <script src="app.js"></script>
 </body>
 </html>
+
 

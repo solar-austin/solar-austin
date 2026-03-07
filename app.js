@@ -13,14 +13,72 @@ const BASE_YEAR = 2025;
  * Capacity factors: average fraction of nameplate capacity that each resource produces over a year.
  * Used to convert MW or MW/year build into TWh (e.g. MW * 8760 * CF / 1e6).
  */
-const CF = { wind: 0.35, solar: 0.25, geo: 0.9, gasBase: 0.5, gasPeak: 0.08, coal: 0.6, nuke: 0.9 };
+const CF = { wind: 0.35, solar: 0.25, distSolar: 0.2, geo: 0.9, gasBase: 0.5, gasPeak: 0.08, coal: 0.6, nuke: 0.9 };
 
 /** Wholesale or proxy energy prices ($/MWh) for energy rows; batt is $k/MW-year for capacity. */
-const PRICES = { nuke: 35, gasBase: 55, gasPeak: 95, coal: 45, ee: 25, dr: 25, exWind: 28, exSolar: 24, newWind: 48, newSolar: 36, geo: 85, gap: 120, batt: 120 };
+const PRICES = { nuke: 35, gasBase: 55, gasPeak: 95, coal: 45, ee: 25, dr: 25, exWind: 28, exSolar: 24, newWind: 48, newSolar: 36, distSolar: 40, geo: 85, gap: 120, batt: 120 };
 
 // Cost units: vol (TWh) × price ($/MWh) → 1 TWh = 1e6 MWh, so cost ($) = vol × 1e6 × price, cost ($M) = vol × price.
 const MWH_PER_TWH = 1e6;
 const DOLLARS_PER_MILLION = 1e6;
+const HOURS_PER_YEAR = 8760;
+const DIST_SOLAR_BASELINE_MW = 188;
+const DEFAULT_GRAPH_SHADE = 25;
+const DEFAULT_LINE_SEPARATION = 5;
+const DEFAULT_HATCH_STRENGTH = 50;
+
+function blendHex(hex, targetHex, amount) {
+  const a = Math.max(0, Math.min(1, amount));
+  const toRgb = (h) => {
+    const n = parseInt(h.slice(1), 16);
+    return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+  };
+  const src = toRgb(hex);
+  const dst = toRgb(targetHex);
+  const r = Math.round(src.r + (dst.r - src.r) * a);
+  const g = Math.round(src.g + (dst.g - src.g) * a);
+  const b = Math.round(src.b + (dst.b - src.b) * a);
+  return `#${[r, g, b].map((v) => v.toString(16).padStart(2, '0')).join('')}`;
+}
+
+const SHADE_OFFSETS = { borderToBlack: 0.28 };
+const FAMILY_BASE_COLORS = { wind: '#4FC3F7', solar: '#E09328', distributed: '#C9852F', geo: '#9A6346', combined: '#43A047' };
+const SPLIT_COLOR_FAMILIES = { exWind: 'wind', newWind: 'wind', exSolar: 'solar', newSolar: 'solar', distSolar: 'distributed', geo: 'geo' };
+
+function getGraphShadeAmount() {
+  const raw = Number(document.getElementById('p_graph_shade')?.value);
+  const pct = Number.isFinite(raw) ? raw : DEFAULT_GRAPH_SHADE;
+  return Math.max(0, Math.min(100, pct)) / 100;
+}
+
+function getLineSeparation() {
+  const raw = Number(document.getElementById('p_line_sep')?.value);
+  const px = Number.isFinite(raw) ? raw : DEFAULT_LINE_SEPARATION;
+  return Math.max(1, Math.min(24, px));
+}
+
+function getHatchStrengthScale() {
+  const raw = Number(document.getElementById('p_hatch_strength')?.value);
+  const pct = Number.isFinite(raw) ? raw : DEFAULT_HATCH_STRENGTH;
+  return Math.max(0, Math.min(100, pct)) / 100;
+}
+
+function getFamilyShades(family) {
+  const base = FAMILY_BASE_COLORS[family];
+  if (!base) return null;
+  return {
+    fill: blendHex(base, '#ffffff', getGraphShadeAmount()),
+    border: blendHex(base, '#000000', SHADE_OFFSETS.borderToBlack),
+  };
+}
+
+function getPowerGroupStyles() {
+  const combined = getFamilyShades('combined');
+  return {
+    existingPower: { fill: combined.fill, border: combined.border, l: 'Existing Power' },
+    newGeneration: { fill: combined.fill, border: combined.border, l: 'New Generation' },
+  };
+}
 
 /**
  * Chart colors (c) and legend labels (l). Wind and solar are single-hue pairs: same color, light then dark (same shade step).
@@ -34,15 +92,19 @@ const STYLES = {
   dr: { c: '#14b8a6', l: 'Demand Response' },
   exWind: { c: '#B3E5FC', l: 'Exist. Wind' },   // light blue
   newWind: { c: '#4FC3F7', l: 'New Wind' },     // dark blue (same hue)
-  exSolar: { c: '#FFDDA0', l: 'Exist. Solar' }, // light orange (same hue as New Solar)
-  newSolar: { c: '#E09328', l: 'New Solar' },   // dark orange (same hue)
-  geo: { c: '#A1887F', l: 'New Geo' },
-  gap: { c: '#E57373', l: 'Market Gap' },
+  exSolar: { c: '#FFDDA0', l: 'Exist. Utility Solar' }, // light orange (same hue as New Solar)
+  newSolar: { c: '#E09328', l: 'New Utility Solar' },   // dark orange (same hue)
+  distSolar: { c: '#C9852F', l: 'Distributed Solar' },
+  geo: { c: '#9A6346', l: 'New Geo' },
+  gap: { c: '#E57373', l: 'Deficit' },
   batt: { c: '#CE93D8', l: 'Battery' },
 };
 
-/** Stack/legend order: base first (bottom), then new resources on top. */
-const MIX_CHART_ORDER = ['nuke', 'gasBase', 'gasPeak', 'coal', 'exWind', 'exSolar', 'newWind', 'newSolar', 'geo', 'gap'];
+/** Stack order when split-by-resource is enabled on charts. */
+const MIX_SPLIT_KEYS = ['nuke', 'gasBase', 'gasPeak', 'coal', 'geo', 'exWind', 'newWind', 'exSolar', 'newSolar', 'distSolar', 'gap'];
+
+/** Top-chart grouping when split-by-resource is disabled. */
+const MIX_COMBINED_KEYS = ['existingPower', 'newGeneration', 'gap'];
 
 /**
  * 24-hour normalized profiles for the August peak reliability stress test.
@@ -58,8 +120,9 @@ const PROF = {
   wind: [0.5, 0.45, 0.4, 0.35, 0.3, 0.25, 0.2, 0.15, 0.1, 0.1, 0.15, 0.2, 0.25, 0.2, 0.15, 0.15, 0.2, 0.25, 0.35, 0.45, 0.55, 0.6, 0.6, 0.55],
 };
 
-/** Nuclear TWh (constant in mix). Used to derive baseload MW in reliability so both use same assumption. */
-const NUKE_TWH = 3.4;
+/** Annual solar degradation applied to both existing and new solar output. */
+const SOLAR_DEGRADATION_PCT = 0.5;
+const SOLAR_DEGRADATION_FACTOR = 1 - SOLAR_DEGRADATION_PCT / 100;
 
 /** Existing solar contracts from the provided chart (MW, contract expiration year). */
 const EXISTING_SOLAR_FLEET = [
@@ -100,21 +163,131 @@ function buildExistingTwhByYear(fleet, cf) {
   });
 }
 
+/** Build existing-fleet MW by year from MW + contract expirations. */
+function buildExistingMwByYear(fleet) {
+  return Array.from({ length: YEARS }, (_, i) => {
+    const year = BASE_YEAR + i;
+    return fleet.reduce((sum, asset) => sum + (isAssetActiveInYear(asset, year) ? asset.mw : 0), 0);
+  });
+}
+
+/** Solar output factor at a given age, with annual degradation. */
+function solarOutputFactorForAge(ageYears) {
+  return Math.pow(SOLAR_DEGRADATION_FACTOR, Math.max(0, ageYears));
+}
+
+/** Build years complete by a given year index (model starts adding new builds after year 1). */
+function buildYearsByIndex(yearIndex) {
+  return Math.max(0, yearIndex - 1);
+}
+
+/** Annual TWh from nuclear MW. */
+function nukeMwToTwh(nukeMw) {
+  return (nukeMw * 8760 * CF.nuke) / 1e6;
+}
+
+/** Linear interpolation helper. */
+function lerp(start, end, t) {
+  return start + (end - start) * t;
+}
+
+/** Existing solar TWh after degradation for each year of the horizon. */
+function buildExistingSolarTwhByYear() {
+  return EXISTING_SOLAR_MW.map((mw, i) => (mw * solarOutputFactorForAge(i) * 8760 * CF.solar) / 1e6);
+}
+
+/**
+ * New-build annual TWh by year, with optional degradation on each build tranche.
+ * Each tranche is assumed online beginning the year after it is built.
+ */
+function getNewBuildTwhForYearIndex(annualMw, cf, yearIndex, applyDegradation = false) {
+  let twh = 0;
+  for (let ageYears = 1; ageYears <= buildYearsByIndex(yearIndex); ageYears++) {
+    const factor = applyDegradation ? solarOutputFactorForAge(ageYears) : 1;
+    twh += (annualMw * factor * 8760 * cf) / 1e6;
+  }
+  return twh;
+}
+
+/** Effective MW in a given year with optional degradation for each annual build tranche. */
+function getNewBuildEffectiveMwForYearIndex(annualMw, yearIndex, applyDegradation = false) {
+  let mw = 0;
+  for (let ageYears = 1; ageYears <= buildYearsByIndex(yearIndex); ageYears++) {
+    const factor = applyDegradation ? solarOutputFactorForAge(ageYears) : 1;
+    mw += annualMw * factor;
+  }
+  return mw;
+}
+
+/** Sum of solar degradation factors over build tranches through a given year index. */
+function getSolarDegradationSumForYearIndex(yearIndex) {
+  let sum = 0;
+  for (let ageYears = 1; ageYears <= buildYearsByIndex(yearIndex); ageYears++) {
+    sum += solarOutputFactorForAge(ageYears);
+  }
+  return sum;
+}
+
+/**
+ * Convert 2035 target end-state MW sliders into constant annual build MW values.
+ * Wind target includes existing wind; utility-solar target includes existing solar.
+ * Distributed-solar annual build is computed relative to the 2025 baseline.
+ */
+function getBuildPlanFromTargets(windTargetMw, solarTargetMw, distSolarTargetMw, yearIndex = YEARS - 1) {
+  const exWindMw2035 = (EXISTING_WIND_TWH[yearIndex] * 1e6) / (8760 * CF.wind);
+  const exSolarMw2035 = (EXISTING_SOLAR_TWH[yearIndex] * 1e6) / (8760 * CF.solar);
+  const newWindMw2035 = Math.max(0, windTargetMw - exWindMw2035);
+  const newSolarMw2035 = Math.max(0, solarTargetMw - exSolarMw2035);
+  const distSolarMw2035 = Math.max(0, distSolarTargetMw);
+  const newDistSolarMw2035 = distSolarMw2035 - DIST_SOLAR_BASELINE_MW;
+
+  const buildYears = buildYearsByIndex(yearIndex);
+  const solarFactorSum = getSolarDegradationSumForYearIndex(yearIndex);
+
+  const windAnnualMw = buildYears > 0 ? newWindMw2035 / buildYears : 0;
+  const solarAnnualMw = solarFactorSum > 0 ? newSolarMw2035 / solarFactorSum : 0;
+  const distSolarAnnualMw = buildYears > 0 ? newDistSolarMw2035 / buildYears : 0;
+
+  return {
+    exWindMw2035,
+    exSolarMw2035,
+    newWindMw2035,
+    newSolarMw2035,
+    distSolarMw2035,
+    newDistSolarMw2035,
+    windAnnualMw,
+    solarAnnualMw,
+    distSolarAnnualMw,
+  };
+}
+
+/** Convert a 2035 MW target to constant annual additions over the build horizon. */
+function getAnnualBuildFromTarget(targetMw, yearIndex = YEARS - 1) {
+  const buildYears = buildYearsByIndex(yearIndex);
+  return buildYears > 0 ? targetMw / buildYears : 0;
+}
+
 /** Existing wind/solar TWh by year (2025..2035), derived directly from contract expirations. */
 const EXISTING_WIND_TWH = buildExistingTwhByYear(EXISTING_WIND_FLEET, CF.wind);
-const EXISTING_SOLAR_TWH = buildExistingTwhByYear(EXISTING_SOLAR_FLEET, CF.solar);
+const EXISTING_SOLAR_MW = buildExistingMwByYear(EXISTING_SOLAR_FLEET);
+const EXISTING_SOLAR_TWH = buildExistingSolarTwhByYear();
 const BUILD_YRS_TOTAL = 9;
 
 /** Build exact args for runReliability so chart and getMinMarginPct use identical inputs. */
-function getReliabilityArgs(nWind, nSolar, nGeo, batt, gasBase, gasPeak, coal, ee, dr, growth, marginGoalPct) {
+function getReliabilityArgs(nukeMW, windTargetMw, solarTargetMw, distSolarTargetMw, geoTargetMw, batt, gasBase, gasPeak, coal, ee, dr, growth, marginGoalPct) {
+  const plan = getBuildPlanFromTargets(windTargetMw, solarTargetMw, distSolarTargetMw, YEARS - 1);
   const exSolarMW = (EXISTING_SOLAR_TWH[YEARS - 1] * 1e6) / (8760 * CF.solar);
   const exWindMW = (EXISTING_WIND_TWH[YEARS - 1] * 1e6) / (8760 * CF.wind);
+  const newSolarMW = plan.newSolarMw2035;
+  const newDistSolarMW = plan.distSolarMw2035 * (CF.distSolar / CF.solar);
   return [
+    nukeMW,
     exSolarMW,
     exWindMW,
-    nSolar * BUILD_YRS_TOTAL,
-    nWind * BUILD_YRS_TOTAL,
-    nGeo * BUILD_YRS_TOTAL,
+    newSolarMW,
+    newDistSolarMW,
+    plan.newWindMw2035,
+    geoTargetMw,
     gasBase,
     gasPeak,
     coal,
@@ -133,49 +306,103 @@ function update() {
   const tx = +document.getElementById('p_tx').value;
   const growth = +document.getElementById('p_growth').value;
   const marginGoalPct = +document.getElementById('p_margin_goal').value;
-  const nSolar = +document.getElementById('p_solar').value;
-  const nWind = +document.getElementById('p_wind').value;
-  const nGeo = +document.getElementById('p_geo').value;
+  const nukeMW = +document.getElementById('p_nuke').value;
+  const solarTargetMw = +document.getElementById('p_solar').value;
+  const distSolarTargetMw = +document.getElementById('p_dist_solar').value;
+  const windTargetMw = +document.getElementById('p_wind').value;
+  const geoTargetMw = +document.getElementById('p_geo').value;
   const gasBase = +document.getElementById('p_gas_base').value;
   const gasPeak = +document.getElementById('p_gas_peak').value;
   const coal = +document.getElementById('p_coal').value;
   const ee = +document.getElementById('p_ee').value;
   const dr = +document.getElementById('p_dr').value;
   const batt = +document.getElementById('p_batt').value;
+  const graphHoverEnabled = document.getElementById('p_graph_hover').checked;
+  const mixShowMw = document.getElementById('mix_units_mw').checked;
+  const splitByType = document.getElementById('rel_stack_by_type').checked;
+  const graphShade = +document.getElementById('p_graph_shade').value;
+  const lineSep = +document.getElementById('p_line_sep').value;
+  const hatchStrength = +document.getElementById('p_hatch_strength').value;
 
-  const buildYrsTotal = BUILD_YRS_TOTAL;
+  const buildPlan = getBuildPlanFromTargets(windTargetMw, solarTargetMw, distSolarTargetMw, YEARS - 1);
+  const geoAnnualMw = getAnnualBuildFromTarget(geoTargetMw, YEARS - 1);
+  const solarMw2035 = buildPlan.newSolarMw2035;
+  const distSolarMw2035 = buildPlan.distSolarMw2035;
+  const exWindMw2035 = buildPlan.exWindMw2035;
+  const exSolarMw2035 = buildPlan.exSolarMw2035;
+  const geoMw2035 = geoTargetMw;
+  const windMw2035 = buildPlan.newWindMw2035;
+  const totalMw2035NoBattery = nukeMW + gasBase + gasPeak + coal + exWindMw2035 + exSolarMw2035 + windMw2035 + solarMw2035 + distSolarMw2035 + geoMw2035;
+  const annualBuildLabel = (mwPerYear) => `${mwPerYear >= 0 ? '+' : ''}${Math.round(mwPerYear)} MW/yr`;
+  const transitionYears = Math.max(1, YEARS - 1);
+  const nukeAnnualDelta = (nukeMW - DEFAULT_INPUTS.p_nuke) / transitionYears;
+  const gasBaseAnnualDelta = (gasBase - DEFAULT_INPUTS.p_gas_base) / transitionYears;
+  const gasPeakAnnualDelta = (gasPeak - DEFAULT_INPUTS.p_gas_peak) / transitionYears;
+  const coalAnnualDelta = (coal - DEFAULT_INPUTS.p_coal) / transitionYears;
+
   document.getElementById('v_tx').textContent = '$' + tx;
   document.getElementById('v_growth').textContent = growth + '%';
+  document.getElementById('v_graph_shade').textContent = graphShade + '%';
+  document.getElementById('v_line_sep').textContent = lineSep + ' px';
+  document.getElementById('v_hatch_strength').textContent = hatchStrength + '%';
   document.getElementById('v_margin_goal').textContent = marginGoalPct + '%';
-  document.getElementById('v_solar').innerHTML = nSolar + ' MW/yr<span class="val-total">' + (nSolar * buildYrsTotal) + ' MW total</span>';
-  document.getElementById('v_wind').innerHTML = nWind + ' MW/yr<span class="val-total">' + (nWind * buildYrsTotal) + ' MW total</span>';
-  document.getElementById('v_geo').innerHTML = nGeo + ' MW/yr<span class="val-total">' + (nGeo * buildYrsTotal) + ' MW total</span>';
-  document.getElementById('v_gas_base').textContent = gasBase + ' MW';
-  document.getElementById('v_gas_peak').textContent = gasPeak + ' MW';
-  document.getElementById('v_coal').textContent = coal + ' MW';
+  document.getElementById('v_nuke').innerHTML = `${nukeMW} MW<span class="val-total">${annualBuildLabel(nukeAnnualDelta)}</span>`;
+  document.getElementById('v_solar').innerHTML = `${solarTargetMw} MW<span class="val-total">${annualBuildLabel(buildPlan.solarAnnualMw)}</span>`;
+  document.getElementById('v_dist_solar').innerHTML = `${distSolarTargetMw} MW<span class="val-total">${annualBuildLabel(buildPlan.distSolarAnnualMw)}</span>`;
+  document.getElementById('v_wind').innerHTML = `${windTargetMw} MW<span class="val-total">${annualBuildLabel(buildPlan.windAnnualMw)}</span>`;
+  document.getElementById('v_geo').innerHTML = `${geoTargetMw} MW<span class="val-total">${annualBuildLabel(geoAnnualMw)}</span>`;
+  document.getElementById('v_gas_base').innerHTML = `${gasBase} MW<span class="val-total">${annualBuildLabel(gasBaseAnnualDelta)}</span>`;
+  document.getElementById('v_gas_peak').innerHTML = `${gasPeak} MW<span class="val-total">${annualBuildLabel(gasPeakAnnualDelta)}</span>`;
+  document.getElementById('v_coal').innerHTML = `${coal} MW<span class="val-total">${annualBuildLabel(coalAnnualDelta)}</span>`;
   document.getElementById('v_ee').textContent = ee + ' MW';
   document.getElementById('v_dr').textContent = dr + ' MW';
   document.getElementById('v_batt').textContent = batt + ' MW';
+  document.getElementById('v_total_mw_2035').textContent = Math.round(totalMw2035NoBattery) + ' MW';
 
-  const data = { nuke: [], gasBase: [], gasPeak: [], coal: [], exWind: [], exSolar: [], geo: [], newWind: [], newSolar: [], ee: [], dr: [], gap: [], load: [] };
+  const data = { nuke: [], gasBase: [], gasPeak: [], coal: [], exWind: [], exSolar: [], geo: [], newWind: [], newSolar: [], distSolar: [], ee: [], dr: [], gap: [], load: [] };
+  const defaultBuildPlan = getBuildPlanFromTargets(DEFAULT_INPUTS.p_wind, DEFAULT_INPUTS.p_solar, DEFAULT_INPUTS.p_dist_solar, YEARS - 1);
+  const defaultGeoAnnualMw = getAnnualBuildFromTarget(DEFAULT_INPUTS.p_geo, YEARS - 1);
+  const startTwh = {
+    nuke: nukeMwToTwh(DEFAULT_INPUTS.p_nuke),
+    gasBase: (DEFAULT_INPUTS.p_gas_base * 8760 * CF.gasBase) / 1e6,
+    gasPeak: (DEFAULT_INPUTS.p_gas_peak * 8760 * CF.gasPeak) / 1e6,
+    coal: (DEFAULT_INPUTS.p_coal * 8760 * CF.coal) / 1e6,
+    ee: (DEFAULT_INPUTS.p_ee * 0.7 * 8760 * 0.02) / 1e6,
+    dr: (DEFAULT_INPUTS.p_dr * 200) / 1e6,
+    geo: getNewBuildTwhForYearIndex(defaultGeoAnnualMw, CF.geo, 0, false),
+    newWind: getNewBuildTwhForYearIndex(defaultBuildPlan.windAnnualMw, CF.wind, 0, false),
+    newSolar: getNewBuildTwhForYearIndex(defaultBuildPlan.solarAnnualMw, CF.solar, 0, true),
+    distSolar: (DIST_SOLAR_BASELINE_MW * HOURS_PER_YEAR * CF.distSolar) / 1e6,
+  };
+  const endTwh = {
+    nuke: nukeMwToTwh(nukeMW),
+    gasBase: (gasBase * 8760 * CF.gasBase) / 1e6,
+    gasPeak: (gasPeak * 8760 * CF.gasPeak) / 1e6,
+    coal: (coal * 8760 * CF.coal) / 1e6,
+    ee: (ee * 0.7 * 8760 * 0.02) / 1e6,
+    dr: (dr * 200) / 1e6,
+    geo: getNewBuildTwhForYearIndex(geoAnnualMw, CF.geo, YEARS - 1, false),
+    newWind: getNewBuildTwhForYearIndex(buildPlan.windAnnualMw, CF.wind, YEARS - 1, false),
+    newSolar: getNewBuildTwhForYearIndex(buildPlan.solarAnnualMw, CF.solar, YEARS - 1, true),
+    distSolar: (buildPlan.distSolarMw2035 * HOURS_PER_YEAR * CF.distSolar) / 1e6,
+  };
 
   for (let i = 0; i < YEARS; i++) {
+    const blend = i / (YEARS - 1);
     const yrLoadGross = 14.2 * Math.pow(1 + growth / 100, i);
-    // EE/DR: effective energy savings (70% availability, ~2% equivalent CF for demand reduction)
-    const eeTwh = (ee * 0.7 * 8760 * 0.02) / 1e6;
+    const eeTwh = lerp(startTwh.ee, endTwh.ee, blend);
     const yrLoad = Math.max(0, yrLoadGross - eeTwh);
     data.load.push(yrLoad);
-    const nuke = NUKE_TWH;
+    const nuke = lerp(startTwh.nuke, endTwh.nuke, blend);
     const exW = EXISTING_WIND_TWH[i];
     const exS = EXISTING_SOLAR_TWH[i];
-
-    const buildYrs = Math.max(0, i - 1);
-    const geoTwh = (nGeo * buildYrs * 8760 * CF.geo) / 1e6;
-    const winTwh = (nWind * buildYrs * 8760 * CF.wind) / 1e6;
-    const solTwh = (nSolar * buildYrs * 8760 * CF.solar) / 1e6;
-    const gasBaseTwh = (gasBase * 8760 * CF.gasBase) / 1e6;
-    const gasPeakTwh = (gasPeak * 8760 * CF.gasPeak) / 1e6;
-    const coalTwh = (coal * 8760 * CF.coal) / 1e6;
+    const geoTwh = lerp(startTwh.geo, endTwh.geo, blend);
+    const winTwh = lerp(startTwh.newWind, endTwh.newWind, blend);
+    const solTwh = lerp(startTwh.newSolar, endTwh.newSolar, blend);
+    const distSolTwh = lerp(startTwh.distSolar, endTwh.distSolar, blend);
+    const gasBaseTwh = lerp(startTwh.gasBase, endTwh.gasBase, blend);
+    const gasPeakTwh = lerp(startTwh.gasPeak, endTwh.gasPeak, blend);
+    const coalTwh = lerp(startTwh.coal, endTwh.coal, blend);
 
     data.nuke.push(nuke);
     data.gasBase.push(gasBaseTwh);
@@ -186,11 +413,11 @@ function update() {
     data.geo.push(geoTwh);
     data.newWind.push(winTwh);
     data.newSolar.push(solTwh);
+    data.distSolar.push(distSolTwh);
     data.ee.push(eeTwh);
-    // DR volume for financials: MWh shifted per year (e.g. 200 hours of DR events) → TWh
-    data.dr.push((dr * 200) / 1e6);
+    data.dr.push(lerp(startTwh.dr, endTwh.dr, blend));
 
-    const totalSup = nuke + exW + exS + geoTwh + winTwh + solTwh + gasBaseTwh + gasPeakTwh + coalTwh;
+    const totalSup = nuke + exW + exS + geoTwh + winTwh + solTwh + distSolTwh + gasBaseTwh + gasPeakTwh + coalTwh;
     data.gap.push(Math.max(0, yrLoad - totalSup));
   }
 
@@ -201,9 +428,10 @@ function update() {
   const carbonFreePct = Math.max(0, ((total2035 - carbonSources) / total2035) * 100);
   document.getElementById('k_clean').textContent = carbonFreePct.toFixed(0) + '%';
 
-  drawMix(data);
-  const rel = runReliability(...getReliabilityArgs(nWind, nSolar, nGeo, batt, gasBase, gasPeak, coal, ee, dr, growth, marginGoalPct));
-  drawRel(rel);
+  setMixUnitsLabel(mixShowMw);
+  drawMix(data, graphHoverEnabled, mixShowMw, splitByType);
+  const rel = runReliability(...getReliabilityArgs(nukeMW, windTargetMw, solarTargetMw, distSolarTargetMw, geoTargetMw, batt, gasBase, gasPeak, coal, ee, dr, growth, marginGoalPct));
+  drawRel(rel, graphHoverEnabled, splitByType, marginGoalPct);
 
   // Supply margin: minimum hourly (supply - load) / load as %, from reliability run
   let marginPct = 0;
@@ -234,6 +462,7 @@ function update() {
     geo: data.geo[lastIdx],
     newWind: data.newWind[lastIdx],
     newSolar: data.newSolar[lastIdx],
+    distSolar: data.distSolar[lastIdx],
     gap: data.gap[lastIdx],
   };
   const totCostM = runFinancials(twh35, tx, total2035, batt);
@@ -249,17 +478,18 @@ function runFinancials(twh, txAdder, loadTWh, battMW) {
   const isRemote = (k) => ['nuke', 'coal', 'exWind', 'exSolar', 'newWind', 'newSolar', 'gap'].includes(k);
   const rows = [
     { k: 'newWind', n: 'New Wind' },
-    { k: 'newSolar', n: 'New Solar' },
+    { k: 'newSolar', n: 'New Utility Solar' },
+    { k: 'distSolar', n: 'Distributed Solar' },
     { k: 'geo', n: 'Geothermal' },
     { k: 'ee', n: 'Energy Efficiency' },
     { k: 'dr', n: 'Demand Response' },
     { k: 'exWind', n: 'Exist. Wind' },
-    { k: 'exSolar', n: 'Exist. Solar' },
+    { k: 'exSolar', n: 'Exist. Utility Solar' },
     { k: 'coal', n: 'Coal' },
     { k: 'gasBase', n: 'Gas (Baseload)' },
     { k: 'gasPeak', n: 'Gas (Peaker)' },
     { k: 'nuke', n: 'Nuclear' },
-    { k: 'gap', n: 'Market Gap' },
+    { k: 'gap', n: 'Deficit' },
   ];
 
   let html = '';
@@ -325,22 +555,24 @@ window.setPrice = function (key, value) {
 /**
  * Returns 2035 TWh by resource and load for the given build/assumptions. Used by autoSolve to compute cost.
  */
-function getTwh2035(nWind, nSolar, nGeo, gasBase, gasPeak, coal, ee, dr, growth) {
+function getTwh2035(nukeMW, windTargetMw, solarTargetMw, distSolarTargetMw, geoTargetMw, gasBase, gasPeak, coal, ee, dr, growth) {
   const i = YEARS - 1;
+  const buildPlan = getBuildPlanFromTargets(windTargetMw, solarTargetMw, distSolarTargetMw, i);
+  const geoAnnualMw = getAnnualBuildFromTarget(geoTargetMw, i);
   const yrLoadGross = 14.2 * Math.pow(1 + growth / 100, i);
   const eeTwh = (ee * 0.7 * 8760 * 0.02) / 1e6;
   const load2035 = Math.max(0, yrLoadGross - eeTwh);
-  const nuke = NUKE_TWH;
+  const nuke = nukeMwToTwh(nukeMW);
   const exW = EXISTING_WIND_TWH[i];
   const exS = EXISTING_SOLAR_TWH[i];
-  const buildYrs = Math.max(0, i - 1);
-  const geoTwh = (nGeo * buildYrs * 8760 * CF.geo) / 1e6;
-  const winTwh = (nWind * buildYrs * 8760 * CF.wind) / 1e6;
-  const solTwh = (nSolar * buildYrs * 8760 * CF.solar) / 1e6;
+  const geoTwh = getNewBuildTwhForYearIndex(geoAnnualMw, CF.geo, i, false);
+  const winTwh = getNewBuildTwhForYearIndex(buildPlan.windAnnualMw, CF.wind, i, false);
+  const solTwh = getNewBuildTwhForYearIndex(buildPlan.solarAnnualMw, CF.solar, i, true);
+  const distSolTwh = (buildPlan.distSolarMw2035 * HOURS_PER_YEAR * CF.distSolar) / 1e6;
   const gasBaseTwh = (gasBase * 8760 * CF.gasBase) / 1e6;
   const gasPeakTwh = (gasPeak * 8760 * CF.gasPeak) / 1e6;
   const coalTwh = (coal * 8760 * CF.coal) / 1e6;
-  const totalSup = nuke + exW + exS + geoTwh + winTwh + solTwh + gasBaseTwh + gasPeakTwh + coalTwh;
+  const totalSup = nuke + exW + exS + geoTwh + winTwh + solTwh + distSolTwh + gasBaseTwh + gasPeakTwh + coalTwh;
   const gapTwh = Math.max(0, load2035 - totalSup);
   const drTwh = (dr * 200) / 1e6;
   return {
@@ -356,6 +588,7 @@ function getTwh2035(nWind, nSolar, nGeo, gasBase, gasPeak, coal, ee, dr, growth)
       geo: geoTwh,
       newWind: winTwh,
       newSolar: solTwh,
+      distSolar: distSolTwh,
       gap: gapTwh,
     },
     load2035,
@@ -367,13 +600,12 @@ function getTwh2035(nWind, nSolar, nGeo, gasBase, gasPeak, coal, ee, dr, growth)
  * Battery fills deficits first (charge from surplus hours, discharge to deficit hours); peaker only covers remaining shortfall after battery.
  * Two-pass battery in order 0..23 with carry-over. Power limit = batt MW, energy capacity = 4h.
  */
-function runReliability(exSolarMW, exWindMW, newSolarMW, newWindMW, geo, gasBase, gasPeak, coal, ee, dr, batt, growth, marginGoalPct) {
+function runReliability(nukeMW, exSolarMW, exWindMW, newSolarMW, newDistSolarMW, newWindMW, geo, gasBase, gasPeak, coal, ee, dr, batt, growth, marginGoalPct) {
   const peak = 3150 * Math.pow(1 + growth / 100, 10);
   const E_cap = batt * 4; // MWh, 4-hour duration
-  const nukeMW = (NUKE_TWH * 1e6) / (8760 * CF.nuke); // same nuclear assumption as mix
   const eeFirm = ee * 0.7; // 70% of EE reduces load (MW) during stress
   const marginGoal = (marginGoalPct ?? 15) / 100;
-  const sol = exSolarMW + newSolarMW;
+  const sol = exSolarMW + newSolarMW + newDistSolarMW;
   const win = exWindMW + newWindMW;
 
   // DR profile from headroom (supply − load): shift load toward hours with spare capacity (e.g. baseload at night, solar at midday).
@@ -398,6 +630,7 @@ function runReliability(exSolarMW, exWindMW, newSolarMW, newWindMW, geo, gasBase
     exSolar: new Array(24),
     exWind: new Array(24),
     newSolar: new Array(24),
+    distSolar: new Array(24),
     newWind: new Array(24),
     peaker: new Array(24),
     discharge: new Array(24),
@@ -417,6 +650,7 @@ function runReliability(exSolarMW, exWindMW, newSolarMW, newWindMW, geo, gasBase
     sim.exSolar[h] = exSolarMW * PROF.solar[h];
     sim.exWind[h] = exWindMW * PROF.wind[h];
     sim.newSolar[h] = newSolarMW * PROF.solar[h];
+    sim.distSolar[h] = newDistSolarMW * PROF.solar[h];
     sim.newWind[h] = newWindMW * PROF.wind[h];
     const supplyNoPeaker = nukeMW + gasBase + coal + geo + solarMW + windMW;
     // Charge from real excess above load (not above reserve target), so storage can cycle daily.
@@ -468,37 +702,90 @@ function hourToTimeOfDay(hour) {
 /** Bright red for gap/deficit (top and bottom charts). */
 const GAP_DEFICIT_RED = 'rgba(220, 38, 38, 0.95)';
 const GAP_DEFICIT_BORDER = '#b91c1c';
+const OLD_NEW_BOUNDARY_MAP = { exWind: 'newWind', exSolar: 'newSolar' };
 
-/** Spacing for new-generation diagonal hatch (single direction). */
-const CROSSHATCH_SPACING = 12;
+function getHatchStripeTone(hexColor, colorKey = '') {
+  const n = parseInt(hexColor.slice(1), 16);
+  const r = (n >> 16) & 255;
+  const g = (n >> 8) & 255;
+  const b = n & 255;
+  const isGeothermal = colorKey === 'geo';
+  const baseTint = isGeothermal ? 0.22 : 0.35;
+  const strengthScale = getHatchStrengthScale();
+  // Pivot at 50% so higher strength always increases contrast/visibility.
+  const tintAdjusted = Math.max(0.04, Math.min(0.82, baseTint + (strengthScale - 0.5) * 0.35));
+  const targetR = 255;
+  const targetG = isGeothermal ? 232 : 255;
+  const targetB = isGeothermal ? 212 : 255;
+  return {
+    r,
+    g,
+    b,
+    sr: Math.round(r + (targetR - r) * tintAdjusted),
+    sg: Math.round(g + (targetG - g) * tintAdjusted),
+    sb: Math.round(b + (targetB - b) * tintAdjusted),
+    strengthScale,
+  };
+}
 
-/** Creates a repeating single-direction diagonal hatch (-45°) in the given hex color. Used for new generation. */
-function createCrosshatchPattern(ctx, hexColor) {
-  const size = CROSSHATCH_SPACING * 3;
+function getHatchStripeColor(hexColor, colorKey = '') {
+  const { sr, sg, sb } = getHatchStripeTone(hexColor, colorKey);
+  return `rgba(${sr},${sg},${sb},0.95)`;
+}
+
+function getOldNewBoundaryColor(styleKey) {
+  const newKey = OLD_NEW_BOUNDARY_MAP[styleKey];
+  if (!newKey) return null;
+  const newFill = getSplitSeriesColors(newKey).fill;
+  return getHatchStripeColor(newFill, newKey);
+}
+
+/** Creates a repeating single-direction diagonal hatch in the given hex color. Used for new generation. */
+function createCrosshatchPattern(ctx, hexColor, colorKey = '') {
+  const spacing = getLineSeparation();
+  // Keep tile size an exact multiple of spacing so repeated diagonals line up cleanly.
+  const tileRepeats = 8;
+  const size = spacing * tileRepeats;
   const canvas = document.createElement('canvas');
   canvas.width = size;
   canvas.height = size;
   const c = canvas.getContext('2d');
-  const n = parseInt(hexColor.slice(1), 16);
-  const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+  const { r, g, b, sr, sg, sb, strengthScale } = getHatchStripeTone(hexColor, colorKey);
   c.fillStyle = `rgba(${r},${g},${b},1)`;
   c.fillRect(0, 0, size, size);
-  c.strokeStyle = `rgba(255,255,255,0.25)`;
-  c.lineWidth = 1;
-  c.setLineDash([]);
-  c.lineCap = 'butt';
-  c.translate(0.5, 0.5);
-  for (let offset = -size; offset <= size * 2; offset += CROSSHATCH_SPACING) {
-    c.beginPath();
-    c.moveTo(offset, size);
-    c.lineTo(offset + size, 0);
-    c.stroke();
+  if (strengthScale > 0) {
+    // Rasterized periodic bands avoid anti-aliased seam artifacts at tile boundaries.
+    const alpha = strengthScale <= 0.5
+      ? (strengthScale / 0.5) * 0.95
+      : 0.95 + ((strengthScale - 0.5) / 0.5) * 0.05;
+    const alphaByte = Math.round(255 * Math.max(0, Math.min(1, alpha)));
+    const bandWidth = 1;
+    const img = c.getImageData(0, 0, size, size);
+    const d = img.data;
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        if (((x + y) % spacing) < bandWidth) {
+          const idx = (y * size + x) * 4;
+          d[idx] = sr;
+          d[idx + 1] = sg;
+          d[idx + 2] = sb;
+          d[idx + 3] = alphaByte;
+        }
+      }
+    }
+    c.putImageData(img, 0, 0);
   }
   return ctx.createPattern(canvas, 'repeat');
 }
 
-/** Keys for new generation (get diagonal hatch in mix and reliability charts). */
+/** Keys treated as "new power" for hatching and aggregated grouping. */
 const NEW_GENERATION_KEYS = ['newWind', 'newSolar', 'geo'];
+const SPLIT_OUTER_BORDER_KEYS = new Set(['newWind', 'newSolar', 'distSolar', 'geo']);
+function getSplitSeriesColors(styleKey) {
+  const family = SPLIT_COLOR_FAMILIES[styleKey];
+  if (family) return getFamilyShades(family);
+  return { fill: STYLES[styleKey].c, border: STYLES[styleKey].c };
+}
 
 /**
  * Builds or updates the 11-year stacked area chart (TWh) with Chart.js. Legend and tooltips are built-in.
@@ -514,53 +801,153 @@ function hexToRgba(hex, alpha) {
   return `rgba(${r},${g},${b},${alpha})`;
 }
 
-function drawMix(data) {
+function toMixUnits(values, showMw) {
+  return showMw ? values.map((v) => (v * MWH_PER_TWH) / HOURS_PER_YEAR) : values;
+}
+
+function getMixAxisMax(showMw) {
+  // Keep y-axis static by unit mode for visual consistency across scenarios.
+  return showMw ? 7000 : 25;
+}
+
+function setMixUnitsLabel(showMw) {
+  const el = document.getElementById('mix_units_lbl');
+  if (el) el.textContent = showMw ? 'Nameplate MW' : 'TWh';
+}
+
+function drawMix(data, hoverEnabled, showMw, splitByType) {
   const labels = Array.from({ length: YEARS }, (_, i) => String(BASE_YEAR + i));
-  const keys = MIX_CHART_ORDER;
-  const datasets = keys.map((k) => ({
-    label: STYLES[k].l,
-    data: data[k],
-    backgroundColor: k === 'gap' ? GAP_DEFICIT_RED : hexToRgba(STYLES[k].c, MIX_FILL_ALPHA),
-    borderColor: k === 'gap' ? GAP_DEFICIT_BORDER : STYLES[k].c,
-    borderWidth: 0,
-    fill: true,
-    stack: 'stack0',
-    tension: 0,
-    pointRadius: 0,
-    hoverPointRadius: 0,
-    pointHitRadius: 20,
-    order: k === 'gap' ? 2 : 1,
-    pointStyle: 'rect',
+  const unitLabel = showMw ? 'MW' : 'TWh';
+  const yMax = getMixAxisMax(showMw);
+  const powerGroupStyles = getPowerGroupStyles();
+  const toMwByCf = (series, cf) => series.map((v) => (v * MWH_PER_TWH) / (HOURS_PER_YEAR * cf));
+  const sumSeries = (seriesList) => Array.from({ length: YEARS }, (_, i) => seriesList.reduce((sum, s) => sum + (s[i] ?? 0), 0));
+  const convertLoad = (series) => (showMw ? toMixUnits(series, true) : series);
+  const convertSeriesForKey = (key) => {
+    if (!showMw) return data[key];
+    if (key === 'gap') return Array(YEARS).fill(0);
+    if (key === 'exWind' || key === 'newWind') return toMwByCf(data[key], CF.wind);
+    if (key === 'exSolar' || key === 'newSolar') return toMwByCf(data[key], CF.solar);
+    if (key === 'distSolar') return toMwByCf(data[key], CF.distSolar);
+    if (key === 'geo') return toMwByCf(data[key], CF.geo);
+    if (key === 'nuke') return toMwByCf(data[key], CF.nuke);
+    if (key === 'gasBase') return toMwByCf(data[key], CF.gasBase);
+    if (key === 'gasPeak') return toMwByCf(data[key], CF.gasPeak);
+    if (key === 'coal') return toMwByCf(data[key], CF.coal);
+    return data[key];
+  };
+
+  const splitEntries = MIX_SPLIT_KEYS.map((key) => ({
+    key,
+    label: STYLES[key].l,
+    fillColor: getSplitSeriesColors(key).fill,
+    borderColor: getSplitSeriesColors(key).border,
+    series: convertSeriesForKey(key),
+    isNew: NEW_GENERATION_KEYS.includes(key),
   }));
 
-  datasets.push({
-    label: 'Usage',
-    data: data.load,
-    backgroundColor: 'transparent',
-    borderColor: '#000',
-    borderWidth: 3,
-    fill: false,
-    tension: 0,
-    pointRadius: 0,
-    hoverPointRadius: 0,
-    pointHitRadius: 12,
-    order: 10,
-    pointStyle: 'line',
+  const combinedSeries = {
+    existingPower: sumSeries([
+      convertSeriesForKey('nuke'),
+      convertSeriesForKey('gasBase'),
+      convertSeriesForKey('gasPeak'),
+      convertSeriesForKey('coal'),
+      convertSeriesForKey('exWind'),
+      convertSeriesForKey('exSolar'),
+    ]),
+    newGeneration: sumSeries([
+      convertSeriesForKey('newWind'),
+      convertSeriesForKey('distSolar'),
+      convertSeriesForKey('newSolar'),
+      convertSeriesForKey('geo'),
+    ]),
+    gap: convertSeriesForKey('gap'),
+  };
+  const combinedEntries = MIX_COMBINED_KEYS.map((key) => ({
+    key,
+    label: key === 'gap' ? STYLES.gap.l : powerGroupStyles[key].l,
+    fillColor: key === 'gap' ? STYLES.gap.c : powerGroupStyles[key].fill,
+    borderColor: key === 'gap' ? STYLES.gap.c : powerGroupStyles[key].border,
+    series: combinedSeries[key],
+    isNew: key === 'newGeneration',
+  }));
+
+  const entries = (splitByType ? splitEntries : combinedEntries).filter((entry) => !(showMw && entry.key === 'gap'));
+  const ctx = mixChartInstance ? mixChartInstance.ctx : document.getElementById('mixChart').getContext('2d');
+  const datasets = entries.map((entry) => {
+    const isGap = entry.key === 'gap';
+    const useHatch = entry.isNew;
+    const fillColor = entry.fillColor;
+    const baseBorderColor = entry.borderColor;
+    const oldNewBoundaryColor = splitByType
+      ? getOldNewBoundaryColor(entry.key)
+      : (entry.key === 'existingPower' ? getHatchStripeColor(powerGroupStyles.newGeneration.fill, 'newGeneration') : null);
+    const borderColor = oldNewBoundaryColor || baseBorderColor;
+    const combinedGroupBorder = !splitByType && entry.key === 'newGeneration';
+    const splitBorderWidth = splitByType && SPLIT_OUTER_BORDER_KEYS.has(entry.key) ? 1 : 0;
+    const oldNewBoundaryWidth = oldNewBoundaryColor ? 1 : 0;
+    return {
+      label: entry.label,
+      data: entry.series,
+      backgroundColor: isGap
+        ? GAP_DEFICIT_RED
+        : useHatch
+          ? createCrosshatchPattern(ctx, fillColor, entry.key)
+          : hexToRgba(fillColor, MIX_FILL_ALPHA),
+      borderColor: isGap
+        ? GAP_DEFICIT_BORDER
+        : useHatch
+          ? borderColor
+          : borderColor,
+      borderWidth: combinedGroupBorder ? 1 : Math.max(splitBorderWidth, oldNewBoundaryWidth),
+      fill: true,
+      stack: 'stack0',
+      tension: 0,
+      pointRadius: 0,
+      hoverPointRadius: 0,
+      pointHitRadius: 20,
+      order: isGap ? 2 : 1,
+      pointStyle: 'rect',
+      hidden: showMw && isGap,
+    };
   });
+
+  if (!showMw) {
+    datasets.push({
+      label: 'Usage',
+      data: convertLoad(data.load),
+      backgroundColor: 'transparent',
+      borderColor: '#000',
+      borderWidth: 2,
+      fill: false,
+      tension: 0,
+      pointRadius: 0,
+      hoverPointRadius: 0,
+      pointHitRadius: 12,
+      stack: 'usageOverlay',
+      order: -100,
+      pointStyle: 'line',
+      hidden: false,
+    });
+  }
+
+  const expectedDatasets = entries.length + (showMw ? 0 : 1);
+  if (mixChartInstance && mixChartInstance.data.datasets.length !== expectedDatasets) {
+    mixChartInstance.destroy();
+    mixChartInstance = null;
+  }
 
   if (mixChartInstance) {
     mixChartInstance.data.labels = labels;
-    mixChartInstance.data.datasets.forEach((ds, i) => {
-      ds.data = i < keys.length ? data[keys[i]] : data.load;
-    });
+    mixChartInstance.data.datasets = datasets;
+    mixChartInstance.options.plugins.tooltip.enabled = hoverEnabled;
+    mixChartInstance.options.plugins.tooltip.callbacks.label = (item) => `${item.dataset.label}: ${item.raw.toFixed(1)} ${unitLabel}`;
+    mixChartInstance.options.scales.y.max = yMax;
+    mixChartInstance.options.scales.y.title.text = unitLabel;
     mixChartInstance.update('none');
     return;
   }
 
-  const ctx = document.getElementById('mixChart').getContext('2d');
-  keys.forEach((k, i) => {
-    if (NEW_GENERATION_KEYS.includes(k)) datasets[i].backgroundColor = createCrosshatchPattern(ctx, STYLES[k].c);
-  });
   mixChartInstance = new Chart(ctx, {
     type: 'line',
     data: { labels, datasets },
@@ -569,15 +956,15 @@ function drawMix(data) {
       maintainAspectRatio: false,
       interaction: { mode: 'index', intersect: false },
       plugins: {
-        // Draw all area fills before strokes so the black Usage line stays visible on top.
         filler: { drawTime: 'beforeDatasetsDraw' },
         legend: {
           position: 'bottom',
           labels: { usePointStyle: true },
         },
         tooltip: {
+          enabled: hoverEnabled,
           callbacks: {
-            label: (item) => `${item.dataset.label}: ${item.raw.toFixed(1)} TWh`,
+            label: (item) => `${item.dataset.label}: ${item.raw.toFixed(1)} ${unitLabel}`,
           },
         },
       },
@@ -589,8 +976,8 @@ function drawMix(data) {
         y: {
           stacked: true,
           min: 0,
-          max: 25,
-          title: { display: true, text: 'TWh' },
+          max: yMax,
+          title: { display: true, text: unitLabel },
         },
       },
     },
@@ -600,29 +987,34 @@ function drawMix(data) {
 /** Battery color in reliability chart (matches sidebar Firm Battery swatch). */
 const REL_BATT_COLOR = '#CE93D8';
 
-/** Reliability chart stack order: nuke, coal, gas base, geo (firm, below variable), then all wind/solar, then peaker. Geothermal below all solar and wind. */
+/** Reliability chart stack order in split-by-resource mode. */
 const REL_STACK_ORDER = [
   { simKey: 'nuke', styleKey: 'nuke' },
   { simKey: 'coal', styleKey: 'coal' },
   { simKey: 'gasBase', styleKey: 'gasBase' },
   { simKey: 'geo', styleKey: 'geo' },
   { simKey: 'exWind', styleKey: 'exWind' },
-  { simKey: 'exSolar', styleKey: 'exSolar' },
   { simKey: 'newWind', styleKey: 'newWind' },
+  { simKey: 'exSolar', styleKey: 'exSolar' },
   { simKey: 'newSolar', styleKey: 'newSolar' },
+  { simKey: 'distSolar', styleKey: 'distSolar' },
   { simKey: 'peaker', styleKey: 'gasPeak' },
 ];
 
 /**
- * Builds or updates the 24-hour reliability chart. If "Stack by resource type" is checked: supply stacked by type (same colors as chart 1), battery, deficit, load. Otherwise: single Generation + Peaker + Battery + Deficit + Load (legacy view).
+ * Builds or updates the 24-hour reliability chart.
+ * Split mode: supply stacked by resource type (existing/new ordered together by type).
+ * Combined mode: supply grouped into Existing Power + New Generation, plus battery/deficit/load overlays.
  *
- * @param {{ sim: { load, supply, supplyNoBatt, nuke, gasBase, coal, geo, exSolar, exWind, newSolar, newWind, peaker, discharge }, risk: number }} rel - Result from runReliability().
+ * @param {{ sim: { load, supply, supplyNoBatt, nuke, gasBase, coal, geo, exSolar, exWind, newSolar, distSolar, newWind, peaker, discharge }, risk: number }} rel - Result from runReliability().
  */
-function drawRel(rel) {
+function drawRel(rel, hoverEnabled, splitByType, marginGoalPct) {
   const labels = Array.from({ length: 24 }, (_, i) => hourToTimeOfDay(i));
   const deficit = rel.sim.load.map((l, i) => Math.max(0, l - rel.sim.supply[i]));
-  const stackByType = document.getElementById('rel_stack_by_type').checked;
-  const expectedDatasets = stackByType ? REL_STACK_ORDER.length + 3 : 5;
+  const targetSupply = rel.sim.load.map((l) => l * (1 + (Number.isFinite(marginGoalPct) ? marginGoalPct : 0) / 100));
+  const powerGroupStyles = getPowerGroupStyles();
+  const stackByType = typeof splitByType === 'boolean' ? splitByType : document.getElementById('rel_stack_by_type').checked;
+  const expectedDatasets = stackByType ? REL_STACK_ORDER.length + 4 : 6;
   if (relChartInstance && relChartInstance.data.datasets.length !== expectedDatasets) {
     relChartInstance.destroy();
     relChartInstance = null;
@@ -655,7 +1047,7 @@ function drawRel(rel) {
     order: 1,
   };
   const loadDataset = {
-    label: 'Load',
+    label: 'Usage',
     data: rel.sim.load,
     backgroundColor: 'transparent',
     borderColor: '#000',
@@ -663,92 +1055,107 @@ function drawRel(rel) {
     fill: false,
     tension: 0,
     pointRadius: 0,
-    stack: undefined,
+    stack: 'usageOverlay',
     pointStyle: 'line',
-    order: 0,
+    order: -100,
+  };
+  const targetMarginDataset = {
+    label: `Target Supply (${Math.round(Number.isFinite(marginGoalPct) ? marginGoalPct : 0)}% Margin)`,
+    data: targetSupply,
+    backgroundColor: 'transparent',
+    borderColor: '#6b7280',
+    borderWidth: 1,
+    borderDash: [6, 4],
+    fill: false,
+    tension: 0,
+    pointRadius: 0,
+    stack: 'targetOverlay',
+    pointStyle: 'line',
+    order: -90,
   };
 
-  let datasets;
-  let deficitIdx;
-  if (stackByType) {
-    datasets = REL_STACK_ORDER.map(({ simKey, styleKey }) => ({
-      label: STYLES[styleKey].l,
-      data: rel.sim[simKey] ?? Array(24).fill(0),
-      backgroundColor: hexToRgba(STYLES[styleKey].c, 0.95),
-      borderColor: STYLES[styleKey].c,
-      borderWidth: 0,
-      fill: true,
-      stack: 'area',
-      tension: 0,
-      pointRadius: 0,
-      pointStyle: 'rect',
-      order: 1,
-    }));
-    datasets.push(batteryDataset, deficitDataset, loadDataset);
-    deficitIdx = REL_STACK_ORDER.length + 1;
-  } else {
-    const supplyNoPeaker = rel.sim.supplyNoBatt.map((s, i) => s - (rel.sim.peaker[i] ?? 0));
-    datasets = [
-      {
-        label: 'Generation',
-        data: supplyNoPeaker,
-        backgroundColor: 'rgba(232, 245, 233, 1)',
-        borderColor: '#2e7d32',
-        borderWidth: 0,
-        fill: true,
-        stack: 'area',
-        tension: 0,
-        pointRadius: 0,
-        pointStyle: 'rect',
-        order: 1,
-      },
-      {
-        label: 'Peaker',
-        data: rel.sim.peaker ?? Array(24).fill(0),
-        backgroundColor: hexToRgba(STYLES.gasPeak.c, 0.95),
-        borderColor: STYLES.gasPeak.c,
-        borderWidth: 0,
-        fill: true,
-        stack: 'area',
-        tension: 0,
-        pointRadius: 0,
-        pointStyle: 'rect',
-        order: 1,
-      },
+  const ctx = relChartInstance ? relChartInstance.ctx : document.getElementById('relChart').getContext('2d');
+  const datasets = stackByType
+    ? [
+      ...REL_STACK_ORDER.map(({ simKey, styleKey }) => {
+        const isNew = NEW_GENERATION_KEYS.includes(styleKey);
+        const splitColors = getSplitSeriesColors(styleKey);
+        const oldNewBoundaryColor = getOldNewBoundaryColor(styleKey);
+        const splitBorderWidth = SPLIT_OUTER_BORDER_KEYS.has(styleKey) ? 1 : 0;
+        return {
+          label: STYLES[styleKey].l,
+          data: rel.sim[simKey] ?? Array(24).fill(0),
+          backgroundColor: isNew ? createCrosshatchPattern(ctx, splitColors.fill, styleKey) : hexToRgba(splitColors.fill, 0.95),
+          borderColor: oldNewBoundaryColor || splitColors.border,
+          borderWidth: oldNewBoundaryColor ? 1 : splitBorderWidth,
+          fill: true,
+          stack: 'area',
+          tension: 0,
+          pointRadius: 0,
+          pointStyle: 'rect',
+          order: 1,
+        };
+      }),
       batteryDataset,
       deficitDataset,
+      targetMarginDataset,
       loadDataset,
-    ];
-    deficitIdx = 3;
-  }
+    ]
+    : (() => {
+      const existingPower = Array.from({ length: 24 }, (_, i) =>
+        (rel.sim.nuke[i] ?? 0) +
+        (rel.sim.coal[i] ?? 0) +
+        (rel.sim.gasBase[i] ?? 0) +
+        (rel.sim.peaker[i] ?? 0) +
+        (rel.sim.exWind[i] ?? 0) +
+        (rel.sim.exSolar[i] ?? 0)
+      );
+      const newGeneration = Array.from({ length: 24 }, (_, i) =>
+        (rel.sim.newWind[i] ?? 0) +
+        (rel.sim.distSolar[i] ?? 0) +
+        (rel.sim.newSolar[i] ?? 0) +
+        (rel.sim.geo[i] ?? 0)
+      );
+      return [
+        {
+          label: powerGroupStyles.existingPower.l,
+          data: existingPower,
+          backgroundColor: hexToRgba(powerGroupStyles.existingPower.fill, 0.95),
+          borderColor: getHatchStripeColor(powerGroupStyles.newGeneration.fill, 'newGeneration'),
+          borderWidth: 1,
+          fill: true,
+          stack: 'area',
+          tension: 0,
+          pointRadius: 0,
+          pointStyle: 'rect',
+          order: 1,
+        },
+        {
+          label: powerGroupStyles.newGeneration.l,
+          data: newGeneration,
+          backgroundColor: createCrosshatchPattern(ctx, powerGroupStyles.newGeneration.fill),
+          borderColor: powerGroupStyles.newGeneration.border,
+          borderWidth: 1,
+          fill: true,
+          stack: 'area',
+          tension: 0,
+          pointRadius: 0,
+          pointStyle: 'rect',
+          order: 1,
+        },
+        batteryDataset,
+        deficitDataset,
+        targetMarginDataset,
+        loadDataset,
+      ];
+    })();
 
   if (relChartInstance) {
     relChartInstance.data.labels = labels;
-    if (stackByType) {
-      REL_STACK_ORDER.forEach(({ simKey }, i) => {
-        relChartInstance.data.datasets[i].data = rel.sim[simKey] ?? Array(24).fill(0);
-      });
-      relChartInstance.data.datasets[REL_STACK_ORDER.length].data = rel.sim.discharge;
-      relChartInstance.data.datasets[REL_STACK_ORDER.length + 1].data = deficit;
-      relChartInstance.data.datasets[REL_STACK_ORDER.length + 2].data = rel.sim.load;
-    } else {
-      const supplyNoPeaker = rel.sim.supplyNoBatt.map((s, i) => s - (rel.sim.peaker[i] ?? 0));
-      relChartInstance.data.datasets[0].data = supplyNoPeaker;
-      relChartInstance.data.datasets[1].data = rel.sim.peaker ?? Array(24).fill(0);
-      relChartInstance.data.datasets[2].data = rel.sim.discharge;
-      relChartInstance.data.datasets[3].data = deficit;
-      relChartInstance.data.datasets[4].data = rel.sim.load;
-    }
+    relChartInstance.data.datasets = datasets;
+    relChartInstance.options.plugins.tooltip.enabled = hoverEnabled;
     relChartInstance.update('none');
   } else {
-    const ctx = document.getElementById('relChart').getContext('2d');
-    if (stackByType) {
-      REL_STACK_ORDER.forEach(({ styleKey }, i) => {
-        if (NEW_GENERATION_KEYS.includes(styleKey)) {
-          datasets[i].backgroundColor = createCrosshatchPattern(ctx, STYLES[styleKey].c);
-        }
-      });
-    }
     relChartInstance = new Chart(ctx, {
       type: 'line',
       data: { labels, datasets },
@@ -762,6 +1169,7 @@ function drawRel(rel) {
             labels: { usePointStyle: true },
           },
           tooltip: {
+            enabled: hoverEnabled,
             callbacks: {
               label: (item) => `${item.dataset.label}: ${Math.round(item.raw)} MW`,
             },
@@ -790,9 +1198,11 @@ function drawRel(rel) {
 /** Default slider values (used by reset). */
 const DEFAULT_INPUTS = {
   p_tx: 40,
-  p_wind: 100,
-  p_solar: 150,
-  p_geo: 50,
+  p_nuke: 430,
+  p_wind: 1631,
+  p_solar: 967,
+  p_dist_solar: 188,
+  p_geo: 0,
   p_batt: 500,
   p_gas_base: 300,
   p_gas_peak: 200,
@@ -800,14 +1210,58 @@ const DEFAULT_INPUTS = {
   p_ee: 0,
   p_dr: 0,
   p_growth: 1.5,
+  p_graph_shade: DEFAULT_GRAPH_SHADE,
+  p_line_sep: DEFAULT_LINE_SEPARATION,
+  p_hatch_strength: DEFAULT_HATCH_STRENGTH,
   p_margin_goal: 15,
+  p_graph_hover: true,
+  mix_units_mw: false,
 };
+
+/** Draw default-position marker ticks on slider tracks. */
+function initSliderDefaultMarkers() {
+  document.querySelectorAll('input[type="range"][data-default]').forEach((input) => {
+    const wrap = input.closest('.slider-wrap');
+    if (!wrap) return;
+    const min = Number(input.min ?? 0);
+    const max = Number(input.max ?? 100);
+    const defaultVal = Number(input.dataset.default);
+    if (!Number.isFinite(min) || !Number.isFinite(max) || !Number.isFinite(defaultVal) || max <= min) return;
+    const ratio = (defaultVal - min) / (max - min);
+    const clampedRatio = Math.max(0, Math.min(1, ratio));
+    wrap.classList.add('with-default-marker');
+    wrap.style.setProperty('--default-ratio', clampedRatio.toString());
+  });
+}
+
+/** Snap range sliders to their default value when close. */
+function maybeSnapToDefault(input) {
+  if (input?.dataset?.snap === 'false') return;
+  if (!input || input.type !== 'range' || !input.dataset.default) return;
+  const min = Number(input.min ?? 0);
+  const max = Number(input.max ?? 100);
+  const currentVal = Number(input.value);
+  const defaultVal = Number(input.dataset.default);
+  if (!Number.isFinite(min) || !Number.isFinite(max) || !Number.isFinite(currentVal) || !Number.isFinite(defaultVal) || max <= min) return;
+
+  const stepRaw = Number(input.step);
+  const step = Number.isFinite(stepRaw) && stepRaw > 0 ? stepRaw : (max - min) / 100;
+  const snapThreshold = Math.max(step * 4, (max - min) * 0.004);
+  if (Math.abs(currentVal - defaultVal) > snapThreshold || currentVal === defaultVal) return;
+
+  input.value = String(defaultVal);
+}
 
 /** Restore all inputs to defaults and refresh. */
 function resetInputs() {
   Object.entries(DEFAULT_INPUTS).forEach(([id, value]) => {
     const el = document.getElementById(id);
-    if (el) el.value = value;
+    if (!el) return;
+    if (el.type === 'checkbox') {
+      el.checked = Boolean(value);
+    } else {
+      el.value = value;
+    }
   });
   update();
 }
@@ -816,8 +1270,8 @@ function resetInputs() {
  * Returns the minimum supply margin % (worst hour) for the given inputs. Used by autoSolve to find a mix that hits the margin goal.
  * Uses same getReliabilityArgs → runReliability as the chart so battery and all logic are identical.
  */
-function getMinMarginPct(nWind, nSolar, nGeo, batt, gasBase, gasPeak, coal, ee, dr, growth, marginGoalPct) {
-  const rel = runReliability(...getReliabilityArgs(nWind, nSolar, nGeo, batt, gasBase, gasPeak, coal, ee, dr, growth, marginGoalPct));
+function getMinMarginPct(nukeMW, windTargetMw, solarTargetMw, distSolarTargetMw, geoTargetMw, batt, gasBase, gasPeak, coal, ee, dr, growth, marginGoalPct) {
+  const rel = runReliability(...getReliabilityArgs(nukeMW, windTargetMw, solarTargetMw, distSolarTargetMw, geoTargetMw, batt, gasBase, gasPeak, coal, ee, dr, growth, marginGoalPct));
   let marginPct = 0;
   for (let h = 0; h < 24; h++) {
     const l = rel.sim.load[h];
@@ -833,8 +1287,8 @@ function getMinMarginPct(nWind, nSolar, nGeo, batt, gasBase, gasPeak, coal, ee, 
  * Total cost ($M) for auto-solve: same formula as UI (runFinancials with gen + battery).
  * Energy: vol (TWh) × price ($/MWh) → $M. Battery: batt (MW) × price ($k/MW-yr) / 1000 → $M.
  */
-function totalCostForBuild(nWind, nSolar, nGeo, batt, gasBase, gasPeak, coal, ee, dr, growth, tx) {
-  const { twh35 } = getTwh2035(nWind, nSolar, nGeo, gasBase, gasPeak, coal, ee, dr, growth);
+function totalCostForBuild(nukeMW, windTargetMw, solarTargetMw, distSolarTargetMw, geoTargetMw, batt, gasBase, gasPeak, coal, ee, dr, growth, tx) {
+  const { twh35 } = getTwh2035(nukeMW, windTargetMw, solarTargetMw, distSolarTargetMw, geoTargetMw, gasBase, gasPeak, coal, ee, dr, growth);
   const remoteKeys = new Set(['nuke', 'coal', 'exWind', 'exSolar', 'newWind', 'newSolar', 'gap']);
   let genCostM = 0;
 
@@ -852,6 +1306,8 @@ function totalCostForBuild(nWind, nSolar, nGeo, batt, gasBase, gasPeak, coal, ee
  * Auto-solve: grid over (wind, solar, geo, battery); pick the feasible combo with lowest total cost.
  */
 function autoSolve() {
+  const nukeMW = +document.getElementById('p_nuke').value;
+  const distSolarTargetMw = +document.getElementById('p_dist_solar').value;
   const gasBase = +document.getElementById('p_gas_base').value;
   const gasPeak = +document.getElementById('p_gas_peak').value;
   const coal = +document.getElementById('p_coal').value;
@@ -860,36 +1316,51 @@ function autoSolve() {
   const growth = +document.getElementById('p_growth').value;
   const tx = +document.getElementById('p_tx').value;
   const goal = +document.getElementById('p_margin_goal').value;
-  let best = { totalCostM: Infinity, nWind: 0, nSolar: 0, nGeo: 0, batt: 0 };
+  let best = { totalCostM: Infinity, windTargetMw: DEFAULT_INPUTS.p_wind, solarTargetMw: DEFAULT_INPUTS.p_solar, geoTargetMw: DEFAULT_INPUTS.p_geo, batt: 0 };
 
-  const WIND_VALS = Array.from({ length: 11 }, (_, i) => i * 40);
-  const SOLAR_VALS = Array.from({ length: 11 }, (_, i) => i * 40);
-  const GEO_VALS = Array.from({ length: 9 }, (_, i) => i * 50);
+  const exWind2035 = (EXISTING_WIND_TWH[YEARS - 1] * 1e6) / (8760 * CF.wind);
+  const exSolar2035 = (EXISTING_SOLAR_TWH[YEARS - 1] * 1e6) / (8760 * CF.solar);
+  const solarFactorSum2035 = getSolarDegradationSumForYearIndex(YEARS - 1);
+
+  const WIND_ANNUAL_VALS = Array.from({ length: 11 }, (_, i) => i * 40);
+  const SOLAR_ANNUAL_VALS = Array.from({ length: 11 }, (_, i) => i * 40);
+  const WIND_TARGETS = WIND_ANNUAL_VALS.map((annual) => Math.round(exWind2035 + annual * BUILD_YRS_TOTAL));
+  const SOLAR_TARGETS = SOLAR_ANNUAL_VALS.map((annual) => Math.round(exSolar2035 + annual * solarFactorSum2035));
+  const GEO_ANNUAL_VALS = Array.from({ length: 9 }, (_, i) => i * 50);
+  const GEO_TARGETS = GEO_ANNUAL_VALS.map((annual) => Math.round(annual * BUILD_YRS_TOTAL));
   const BATTERY_VALS = [...Array.from({ length: 13 }, (_, i) => i * 200), 2500];
 
-  for (const nWind of WIND_VALS) {
-    for (const nSolar of SOLAR_VALS) {
-      for (const nGeo of GEO_VALS) {
+  for (const windTargetMw of WIND_TARGETS) {
+    for (const solarTargetMw of SOLAR_TARGETS) {
+      for (const geoTargetMw of GEO_TARGETS) {
         for (const batt of BATTERY_VALS) {
-          const minMarginPct = getMinMarginPct(nWind, nSolar, nGeo, batt, gasBase, gasPeak, coal, ee, dr, growth, goal);
+          const minMarginPct = getMinMarginPct(nukeMW, windTargetMw, solarTargetMw, distSolarTargetMw, geoTargetMw, batt, gasBase, gasPeak, coal, ee, dr, growth, goal);
           if (minMarginPct + 1e-9 < goal) continue;
 
-          const totalCostM = totalCostForBuild(nWind, nSolar, nGeo, batt, gasBase, gasPeak, coal, ee, dr, growth, tx);
-          if (totalCostM < best.totalCostM) best = { totalCostM, nWind, nSolar, nGeo, batt };
+          const totalCostM = totalCostForBuild(nukeMW, windTargetMw, solarTargetMw, distSolarTargetMw, geoTargetMw, batt, gasBase, gasPeak, coal, ee, dr, growth, tx);
+          if (totalCostM < best.totalCostM) best = { totalCostM, windTargetMw, solarTargetMw, geoTargetMw, batt };
         }
       }
     }
   }
 
-  if (best.totalCostM === Infinity) best = { nWind: 0, nSolar: 0, nGeo: 0, batt: 0, totalCostM: 0 };
+  if (best.totalCostM === Infinity) best = { windTargetMw: Math.round(exWind2035), solarTargetMw: Math.round(exSolar2035), geoTargetMw: 0, batt: 0, totalCostM: 0 };
 
-  document.getElementById('p_wind').value = best.nWind;
-  document.getElementById('p_solar').value = best.nSolar;
-  document.getElementById('p_geo').value = best.nGeo;
+  document.getElementById('p_wind').value = best.windTargetMw;
+  document.getElementById('p_solar').value = best.solarTargetMw;
+  document.getElementById('p_geo').value = best.geoTargetMw;
   document.getElementById('p_batt').value = best.batt;
   update();
 }
 // --- Init (runs when script loads; DOM ready because script is at end of body) ---
-document.querySelectorAll('input').forEach((i) => (i.oninput = update));
-window.addEventListener('load', update);
+document.querySelectorAll('input').forEach((input) => {
+  input.oninput = () => {
+    maybeSnapToDefault(input);
+    update();
+  };
+});
+window.addEventListener('load', () => {
+  initSliderDefaultMarkers();
+  update();
+});
 
