@@ -176,6 +176,14 @@
       </div>
       <div class="row">
         <div class="row-head">
+          <span class="swatch" style="background: #7f7f7f"></span>
+          <span class="lbl has-tooltip" title="Controls the thickness of each diagonal hatch line in pixels.">Crosshatch Width</span>
+        </div>
+        <div class="slider-wrap"><input type="range" id="p_hatch_width" min="1" max="12" step="1" value="1" data-default="1" data-snap="false"></div>
+        <span class="val" id="v_hatch_width">1 px</span>
+      </div>
+      <div class="row">
+        <div class="row-head">
           <span class="swatch" style="background: #888"></span>
           <span class="lbl has-tooltip" title="Controls texture intensity for hatched areas. 0 = off, 100 = full strength.">Hatch Strength</span>
         </div>
@@ -203,10 +211,16 @@
       </div>
       <div class="card">
         <div class="chart-head">
+          <h3 class="has-tooltip" title="2035 monthly seasonality (monthly average MW), using the same resource stacks and styling as the other charts. Load follows an Austin best-guess seasonal profile; solar and wind use best-guess seasonal generation profiles; annual totals stay anchored to your scenario.">2035 Seasonality (Monthly Avg MW)</h3>
+        </div>
+        <div class="chart-box-mid"><canvas id="seasonChart"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="chart-head">
           <h3 class="has-tooltip" title="Simulated August peak day: 24-hour supply vs load (MW). Shows whether the system meets load with the margin goal; deficit (red) and risk hours indicate shortfalls.">August Peak Reliability (24-Hour Stress Test)</h3>
           <label class="rel-chart-toggle">
             <input type="checkbox" id="rel_stack_by_type" checked onchange="update()">
-            <span class="has-tooltip" title="Applies to both charts. Checked: split by resource type. Unchecked: combine into Existing Power and New Generation.">Split by resource type</span>
+            <span class="has-tooltip" title="Applies to all charts. Checked: split by resource type. Unchecked: combine into Existing Power and New Generation.">Split by resource type</span>
           </label>
         </div>
         <div class="chart-box-sm"><canvas id="relChart"></canvas></div>

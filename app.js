@@ -25,25 +25,35 @@ const HOURS_PER_YEAR = 8760;
 const DIST_SOLAR_BASELINE_MW = 188;
 const DEFAULT_GRAPH_SHADE = 25;
 const DEFAULT_LINE_SEPARATION = 5;
+const DEFAULT_HATCH_WIDTH = 1;
 const DEFAULT_HATCH_STRENGTH = 50;
 
 function blendHex(hex, targetHex, amount) {
   const a = Math.max(0, Math.min(1, amount));
-  const toRgb = (h) => {
-    const n = parseInt(h.slice(1), 16);
-    return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
-  };
-  const src = toRgb(hex);
-  const dst = toRgb(targetHex);
+  const src = hexToRgb(hex);
+  const dst = hexToRgb(targetHex);
   const r = Math.round(src.r + (dst.r - src.r) * a);
   const g = Math.round(src.g + (dst.g - src.g) * a);
   const b = Math.round(src.b + (dst.b - src.b) * a);
   return `#${[r, g, b].map((v) => v.toString(16).padStart(2, '0')).join('')}`;
 }
 
+function hexToRgb(hex) {
+  const n = parseInt(hex.slice(1), 16);
+  return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+}
+
 const SHADE_OFFSETS = { borderToBlack: 0.28 };
 const FAMILY_BASE_COLORS = { wind: '#4FC3F7', solar: '#E09328', distributed: '#C9852F', geo: '#9A6346', combined: '#43A047' };
 const SPLIT_COLOR_FAMILIES = { exWind: 'wind', newWind: 'wind', exSolar: 'solar', newSolar: 'solar', distSolar: 'distributed', geo: 'geo' };
+
+function getShadedFillColor(hex) {
+  return blendHex(hex, '#ffffff', getGraphShadeAmount());
+}
+
+function getShadedBorderColor(hex) {
+  return blendHex(hex, '#000000', SHADE_OFFSETS.borderToBlack);
+}
 
 function getGraphShadeAmount() {
   const raw = Number(document.getElementById('p_graph_shade')?.value);
@@ -57,6 +67,12 @@ function getLineSeparation() {
   return Math.max(1, Math.min(24, px));
 }
 
+function getCrosshatchWidth() {
+  const raw = Number(document.getElementById('p_hatch_width')?.value);
+  const px = Number.isFinite(raw) ? raw : DEFAULT_HATCH_WIDTH;
+  return Math.max(1, Math.min(12, px));
+}
+
 function getHatchStrengthScale() {
   const raw = Number(document.getElementById('p_hatch_strength')?.value);
   const pct = Number.isFinite(raw) ? raw : DEFAULT_HATCH_STRENGTH;
@@ -67,8 +83,8 @@ function getFamilyShades(family) {
   const base = FAMILY_BASE_COLORS[family];
   if (!base) return null;
   return {
-    fill: blendHex(base, '#ffffff', getGraphShadeAmount()),
-    border: blendHex(base, '#000000', SHADE_OFFSETS.borderToBlack),
+    fill: getShadedFillColor(base),
+    border: getShadedBorderColor(base),
   };
 }
 
@@ -119,6 +135,33 @@ const PROF = {
   solar: [0, 0, 0, 0, 0, 0, 0.05, 0.2, 0.45, 0.65, 0.85, 0.95, 1.0, 0.95, 0.85, 0.65, 0.40, 0.15, 0.02, 0, 0, 0, 0, 0],
   wind: [0.5, 0.45, 0.4, 0.35, 0.3, 0.25, 0.2, 0.15, 0.1, 0.1, 0.15, 0.2, 0.25, 0.2, 0.15, 0.15, 0.2, 0.25, 0.35, 0.45, 0.55, 0.6, 0.6, 0.55],
 };
+const SEASON_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const SEASON_MONTH_HOURS = [744, 672, 744, 720, 744, 720, 744, 744, 720, 744, 720, 744];
+
+/** Normalize monthly shape values so the hours-weighted annual average equals 1. */
+function normalizeSeasonalProfile(profile) {
+  const totalHours = SEASON_MONTH_HOURS.reduce((sum, h) => sum + h, 0);
+  const weightedAvg = profile.reduce((sum, val, i) => sum + (val * SEASON_MONTH_HOURS[i]), 0) / totalHours;
+  if (!Number.isFinite(weightedAvg) || weightedAvg <= 0) return profile.map(() => 0);
+  return profile.map((v) => v / weightedAvg);
+}
+
+/*
+ * Seasonality source data (retrieved 2026-03-07), using ERCOT-wide monthly values as a proxy for Austin:
+ * 1) Load profile from monthly Net Energy for Load (GWh), averaging 2024 + 2025 actual columns:
+ *    https://www.ercot.com/files/docs/2025/02/07/DemandandEnergy2025-for-Corp-Comms.xlsx
+ *    (tab: data_Energy Comparisons_1)
+ * 2) Solar/Wind profile from 2025 monthly generation (GWh):
+ *    https://www.ercot.com/files/docs/2025/02/07/IntGenbyFuel2025.xlsx
+ *    (tab: Summary, rows Solar and Wind)
+ *
+ * Method:
+ * - Convert each month to average MW: (GWh * 1000) / hours_in_month
+ * - Normalize by annual average MW to build dimensionless monthly factors.
+ */
+const LOAD_SEASONAL_PROFILE = normalizeSeasonalProfile([0.9751, 0.8965, 0.8295, 0.8962, 1.0063, 1.1469, 1.1453, 1.2233, 1.0884, 0.9942, 0.8879, 0.9010]);
+const SOLAR_SEASONAL_PROFILE = normalizeSeasonalProfile([0.5799, 0.7092, 0.8996, 0.9526, 1.1374, 1.2510, 1.2588, 1.2890, 1.2496, 1.0730, 0.8768, 0.7057]);
+const WIND_SEASONAL_PROFILE = normalizeSeasonalProfile([0.9795, 1.0178, 1.2345, 1.2922, 0.9503, 1.1227, 0.9415, 0.7283, 0.7151, 0.9221, 1.0469, 1.0566]);
 
 /** Annual solar degradation applied to both existing and new solar output. */
 const SOLAR_DEGRADATION_PCT = 0.5;
@@ -300,7 +343,7 @@ function getReliabilityArgs(nukeMW, windTargetMw, solarTargetMw, distSolarTarget
 }
 
 /**
- * Reads slider values, recomputes 11-year supply/load and gap, updates KPIs and both charts.
+ * Reads slider values, recomputes 11-year supply/load and gap, updates KPIs and charts.
  */
 function update() {
   const tx = +document.getElementById('p_tx').value;
@@ -322,6 +365,7 @@ function update() {
   const splitByType = document.getElementById('rel_stack_by_type').checked;
   const graphShade = +document.getElementById('p_graph_shade').value;
   const lineSep = +document.getElementById('p_line_sep').value;
+  const hatchWidth = +document.getElementById('p_hatch_width').value;
   const hatchStrength = +document.getElementById('p_hatch_strength').value;
 
   const buildPlan = getBuildPlanFromTargets(windTargetMw, solarTargetMw, distSolarTargetMw, YEARS - 1);
@@ -344,6 +388,7 @@ function update() {
   document.getElementById('v_growth').textContent = growth + '%';
   document.getElementById('v_graph_shade').textContent = graphShade + '%';
   document.getElementById('v_line_sep').textContent = lineSep + ' px';
+  document.getElementById('v_hatch_width').textContent = hatchWidth + ' px';
   document.getElementById('v_hatch_strength').textContent = hatchStrength + '%';
   document.getElementById('v_margin_goal').textContent = marginGoalPct + '%';
   document.getElementById('v_nuke').innerHTML = `${nukeMW} MW<span class="val-total">${annualBuildLabel(nukeAnnualDelta)}</span>`;
@@ -465,6 +510,7 @@ function update() {
     distSolar: data.distSolar[lastIdx],
     gap: data.gap[lastIdx],
   };
+  drawSeasonality(twh35, total2035, graphHoverEnabled, splitByType);
   const totCostM = runFinancials(twh35, tx, total2035, batt);
   const rateCents = total2035 > 0 ? (totCostM / total2035 / 10) : 0;
   document.getElementById('k_rate').textContent = rateCents.toFixed(1) + '¢';
@@ -690,6 +736,7 @@ function runReliability(nukeMW, exSolarMW, exWindMW, newSolarMW, newDistSolarMW,
 
 /** Chart.js instances (created on first draw, updated thereafter). */
 let mixChartInstance = null;
+let seasonChartInstance = null;
 let relChartInstance = null;
 
 /** Format hour (0–23) as time of day (12am, 1am, … 11pm). */
@@ -700,9 +747,17 @@ function hourToTimeOfDay(hour) {
 }
 
 /** Bright red for gap/deficit (top and bottom charts). */
-const GAP_DEFICIT_RED = 'rgba(220, 38, 38, 0.95)';
-const GAP_DEFICIT_BORDER = '#b91c1c';
+const GAP_DEFICIT_BASE = '#dc2626';
 const OLD_NEW_BOUNDARY_MAP = { exWind: 'newWind', exSolar: 'newSolar' };
+
+function getGapDeficitColors() {
+  const fillHex = getShadedFillColor(GAP_DEFICIT_BASE);
+  return {
+    fillHex,
+    fill: hexToRgba(fillHex, 0.95),
+    border: getShadedBorderColor(GAP_DEFICIT_BASE),
+  };
+}
 
 function getHatchStripeTone(hexColor, colorKey = '') {
   const n = parseInt(hexColor.slice(1), 16);
@@ -759,7 +814,7 @@ function createCrosshatchPattern(ctx, hexColor, colorKey = '') {
       ? (strengthScale / 0.5) * 0.95
       : 0.95 + ((strengthScale - 0.5) / 0.5) * 0.05;
     const alphaByte = Math.round(255 * Math.max(0, Math.min(1, alpha)));
-    const bandWidth = 1;
+    const bandWidth = Math.max(1, Math.min(spacing, getCrosshatchWidth()));
     const img = c.getImageData(0, 0, size, size);
     const d = img.data;
     for (let y = 0; y < size; y++) {
@@ -778,13 +833,37 @@ function createCrosshatchPattern(ctx, hexColor, colorKey = '') {
   return ctx.createPattern(canvas, 'repeat');
 }
 
+/** Creates thick vertical stripes for deficit/gap fills. */
+function createVerticalStripePattern(ctx, hexColor) {
+  const stripeWidth = 5;
+  const stripeSpacing = stripeWidth * 2;
+  const tileRepeats = 4;
+  const size = stripeSpacing * tileRepeats;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const c = canvas.getContext('2d');
+  const { r, g, b } = hexToRgb(hexColor);
+  c.fillStyle = `rgba(${r},${g},${b},1)`;
+  c.fillRect(0, 0, size, size);
+  c.save();
+  c.globalCompositeOperation = 'destination-out';
+  c.fillStyle = 'rgba(0,0,0,1)';
+  for (let x = 0; x < size; x += stripeSpacing) {
+    c.fillRect(x, 0, stripeWidth, size);
+  }
+  c.restore();
+  return ctx.createPattern(canvas, 'repeat');
+}
+
 /** Keys treated as "new power" for hatching and aggregated grouping. */
 const NEW_GENERATION_KEYS = ['newWind', 'newSolar', 'geo'];
 const SPLIT_OUTER_BORDER_KEYS = new Set(['newWind', 'newSolar', 'distSolar', 'geo']);
 function getSplitSeriesColors(styleKey) {
   const family = SPLIT_COLOR_FAMILIES[styleKey];
   if (family) return getFamilyShades(family);
-  return { fill: STYLES[styleKey].c, border: STYLES[styleKey].c };
+  const base = STYLES[styleKey].c;
+  return { fill: getShadedFillColor(base), border: getShadedBorderColor(base) };
 }
 
 /**
@@ -819,6 +898,7 @@ function drawMix(data, hoverEnabled, showMw, splitByType) {
   const labels = Array.from({ length: YEARS }, (_, i) => String(BASE_YEAR + i));
   const unitLabel = showMw ? 'MW' : 'TWh';
   const yMax = getMixAxisMax(showMw);
+  const gapDeficitColors = getGapDeficitColors();
   const powerGroupStyles = getPowerGroupStyles();
   const toMwByCf = (series, cf) => series.map((v) => (v * MWH_PER_TWH) / (HOURS_PER_YEAR * cf));
   const sumSeries = (seriesList) => Array.from({ length: YEARS }, (_, i) => seriesList.reduce((sum, s) => sum + (s[i] ?? 0), 0));
@@ -890,12 +970,12 @@ function drawMix(data, hoverEnabled, showMw, splitByType) {
       label: entry.label,
       data: entry.series,
       backgroundColor: isGap
-        ? GAP_DEFICIT_RED
+        ? createVerticalStripePattern(ctx, gapDeficitColors.fillHex)
         : useHatch
           ? createCrosshatchPattern(ctx, fillColor, entry.key)
           : hexToRgba(fillColor, MIX_FILL_ALPHA),
       borderColor: isGap
-        ? GAP_DEFICIT_BORDER
+        ? gapDeficitColors.border
         : useHatch
           ? borderColor
           : borderColor,
@@ -984,6 +1064,177 @@ function drawMix(data, hoverEnabled, showMw, splitByType) {
   });
 }
 
+/**
+ * Builds or updates the monthly 2035 seasonality chart (average MW by month).
+ * Uses the same fill/hatch style logic as the other stacked charts.
+ */
+function drawSeasonality(twh35, loadTwh2035, hoverEnabled, splitByType) {
+  const toAvgMw = (twh) => (twh * MWH_PER_TWH) / HOURS_PER_YEAR;
+  const loadAvgMw = toAvgMw(loadTwh2035);
+  const usageMonthly = LOAD_SEASONAL_PROFILE.map((f) => loadAvgMw * f);
+  const monthCount = SEASON_MONTHS.length;
+  const isSplitByType = typeof splitByType === 'boolean' ? splitByType : document.getElementById('rel_stack_by_type').checked;
+  const gapDeficitColors = getGapDeficitColors();
+  const powerGroupStyles = getPowerGroupStyles();
+  const flatProfile = Array(monthCount).fill(1);
+  const getProfileForKey = (key) => {
+    if (key === 'exWind' || key === 'newWind') return WIND_SEASONAL_PROFILE;
+    if (key === 'exSolar' || key === 'newSolar' || key === 'distSolar') return SOLAR_SEASONAL_PROFILE;
+    return flatProfile;
+  };
+
+  const seasonKeysNoGap = ['nuke', 'gasBase', 'gasPeak', 'coal', 'geo', 'exWind', 'newWind', 'exSolar', 'newSolar', 'distSolar'];
+  const seasonalSeries = {};
+  seasonKeysNoGap.forEach((key) => {
+    const annualAvgMw = toAvgMw(twh35[key] ?? 0);
+    const profile = getProfileForKey(key);
+    seasonalSeries[key] = profile.map((f) => annualAvgMw * f);
+  });
+  seasonalSeries.gap = Array.from({ length: monthCount }, (_, i) => {
+    const supplyNoGap = seasonKeysNoGap.reduce((sum, key) => sum + (seasonalSeries[key][i] ?? 0), 0);
+    return Math.max(0, usageMonthly[i] - supplyNoGap);
+  });
+
+  const splitEntries = MIX_SPLIT_KEYS.map((key) => ({
+    key,
+    label: STYLES[key].l,
+    fillColor: getSplitSeriesColors(key).fill,
+    borderColor: getSplitSeriesColors(key).border,
+    series: seasonalSeries[key] ?? Array(monthCount).fill(0),
+    isNew: NEW_GENERATION_KEYS.includes(key),
+  }));
+  const combinedEntries = MIX_COMBINED_KEYS.map((key) => {
+    const series = key === 'existingPower'
+      ? Array.from({ length: monthCount }, (_, i) =>
+        (seasonalSeries.nuke[i] ?? 0) +
+        (seasonalSeries.gasBase[i] ?? 0) +
+        (seasonalSeries.gasPeak[i] ?? 0) +
+        (seasonalSeries.coal[i] ?? 0) +
+        (seasonalSeries.exWind[i] ?? 0) +
+        (seasonalSeries.exSolar[i] ?? 0))
+      : key === 'newGeneration'
+        ? Array.from({ length: monthCount }, (_, i) =>
+          (seasonalSeries.newWind[i] ?? 0) +
+          (seasonalSeries.distSolar[i] ?? 0) +
+          (seasonalSeries.newSolar[i] ?? 0) +
+          (seasonalSeries.geo[i] ?? 0))
+        : (seasonalSeries.gap ?? Array(monthCount).fill(0));
+    return {
+      key,
+      label: key === 'gap' ? STYLES.gap.l : powerGroupStyles[key].l,
+      fillColor: key === 'gap' ? STYLES.gap.c : powerGroupStyles[key].fill,
+      borderColor: key === 'gap' ? STYLES.gap.c : powerGroupStyles[key].border,
+      series,
+      isNew: key === 'newGeneration',
+    };
+  });
+
+  const entries = isSplitByType ? splitEntries : combinedEntries;
+
+  const ctx = seasonChartInstance ? seasonChartInstance.ctx : document.getElementById('seasonChart').getContext('2d');
+  const datasets = entries.map((entry) => {
+    const isGap = entry.key === 'gap';
+    const useHatch = entry.isNew;
+    const fillColor = entry.fillColor;
+    const baseBorderColor = entry.borderColor;
+    const oldNewBoundaryColor = isSplitByType
+      ? getOldNewBoundaryColor(entry.key)
+      : (entry.key === 'existingPower' ? getHatchStripeColor(powerGroupStyles.newGeneration.fill, 'newGeneration') : null);
+    const borderColor = oldNewBoundaryColor || baseBorderColor;
+    const combinedGroupBorder = !isSplitByType && entry.key === 'newGeneration';
+    const splitBorderWidth = isSplitByType && SPLIT_OUTER_BORDER_KEYS.has(entry.key) ? 1 : 0;
+    const oldNewBoundaryWidth = oldNewBoundaryColor ? 1 : 0;
+    return {
+      label: entry.label,
+      data: entry.series,
+      backgroundColor: isGap
+        ? createVerticalStripePattern(ctx, gapDeficitColors.fillHex)
+        : useHatch
+          ? createCrosshatchPattern(ctx, fillColor, entry.key)
+          : hexToRgba(fillColor, 1),
+      borderColor: isGap ? gapDeficitColors.border : borderColor,
+      borderWidth: combinedGroupBorder ? 1 : Math.max(splitBorderWidth, oldNewBoundaryWidth),
+      fill: true,
+      stack: 'stack0',
+      tension: 0.22,
+      cubicInterpolationMode: 'monotone',
+      pointRadius: 0,
+      hoverPointRadius: 0,
+      pointHitRadius: 16,
+      order: isGap ? 2 : 1,
+      pointStyle: 'rect',
+    };
+  });
+  datasets.push({
+    label: 'Usage (2035)',
+    data: usageMonthly,
+    backgroundColor: 'transparent',
+    borderColor: '#111111',
+    borderWidth: 2,
+    fill: false,
+    tension: 0.22,
+    cubicInterpolationMode: 'monotone',
+    pointRadius: 0,
+    hoverPointRadius: 0,
+    pointHitRadius: 12,
+    stack: 'usageOverlay',
+    order: -100,
+    pointStyle: 'line',
+  });
+
+  const monthlyStack = Array.from({ length: monthCount }, (_, i) => entries.reduce((sum, entry) => sum + (entry.series[i] ?? 0), 0));
+  const yMaxRaw = Math.max(...usageMonthly, ...monthlyStack);
+  const yMax = Math.max(100, Math.ceil((yMaxRaw * 1.12) / 100) * 100);
+  const expectedDatasets = entries.length + 1;
+  if (seasonChartInstance && seasonChartInstance.data.datasets.length !== expectedDatasets) {
+    seasonChartInstance.destroy();
+    seasonChartInstance = null;
+  }
+
+  if (seasonChartInstance) {
+    seasonChartInstance.data.labels = SEASON_MONTHS;
+    seasonChartInstance.data.datasets = datasets;
+    seasonChartInstance.options.plugins.tooltip.enabled = hoverEnabled;
+    seasonChartInstance.options.scales.y.max = yMax;
+    seasonChartInstance.update('none');
+    return;
+  }
+
+  seasonChartInstance = new Chart(ctx, {
+    type: 'line',
+    data: { labels: SEASON_MONTHS, datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: {
+          position: 'bottom',
+          labels: { usePointStyle: true },
+        },
+        tooltip: {
+          enabled: hoverEnabled,
+          callbacks: {
+            label: (item) => `${item.dataset.label}: ${Math.round(item.raw)} MW`,
+          },
+        },
+      },
+      scales: {
+        x: {
+          grid: { display: false },
+          ticks: { maxRotation: 0 },
+        },
+        y: {
+          stacked: true,
+          min: 0,
+          max: yMax,
+          title: { display: true, text: 'Monthly Avg MW' },
+        },
+      },
+    },
+  });
+}
+
 /** Battery color in reliability chart (matches sidebar Firm Battery swatch). */
 const REL_BATT_COLOR = '#CE93D8';
 
@@ -1012,8 +1263,12 @@ function drawRel(rel, hoverEnabled, splitByType, marginGoalPct) {
   const labels = Array.from({ length: 24 }, (_, i) => hourToTimeOfDay(i));
   const deficit = rel.sim.load.map((l, i) => Math.max(0, l - rel.sim.supply[i]));
   const targetSupply = rel.sim.load.map((l) => l * (1 + (Number.isFinite(marginGoalPct) ? marginGoalPct : 0) / 100));
+  const gapDeficitColors = getGapDeficitColors();
+  const batteryFill = getShadedFillColor(REL_BATT_COLOR);
+  const batteryBorder = getShadedBorderColor(REL_BATT_COLOR);
   const powerGroupStyles = getPowerGroupStyles();
   const stackByType = typeof splitByType === 'boolean' ? splitByType : document.getElementById('rel_stack_by_type').checked;
+  const ctx = relChartInstance ? relChartInstance.ctx : document.getElementById('relChart').getContext('2d');
   const expectedDatasets = stackByType ? REL_STACK_ORDER.length + 4 : 6;
   if (relChartInstance && relChartInstance.data.datasets.length !== expectedDatasets) {
     relChartInstance.destroy();
@@ -1023,8 +1278,8 @@ function drawRel(rel, hoverEnabled, splitByType, marginGoalPct) {
   const batteryDataset = {
     label: 'Battery',
     data: rel.sim.discharge,
-    backgroundColor: hexToRgba(REL_BATT_COLOR, 0.95),
-    borderColor: REL_BATT_COLOR,
+    backgroundColor: hexToRgba(batteryFill, 0.95),
+    borderColor: batteryBorder,
     borderWidth: 0,
     fill: true,
     stack: 'area',
@@ -1036,8 +1291,8 @@ function drawRel(rel, hoverEnabled, splitByType, marginGoalPct) {
   const deficitDataset = {
     label: 'Deficit',
     data: deficit,
-    backgroundColor: GAP_DEFICIT_RED,
-    borderColor: GAP_DEFICIT_BORDER,
+    backgroundColor: createVerticalStripePattern(ctx, gapDeficitColors.fillHex),
+    borderColor: gapDeficitColors.border,
     borderWidth: 0,
     fill: true,
     stack: 'area',
@@ -1074,7 +1329,6 @@ function drawRel(rel, hoverEnabled, splitByType, marginGoalPct) {
     order: -90,
   };
 
-  const ctx = relChartInstance ? relChartInstance.ctx : document.getElementById('relChart').getContext('2d');
   const datasets = stackByType
     ? [
       ...REL_STACK_ORDER.map(({ simKey, styleKey }) => {
@@ -1212,6 +1466,7 @@ const DEFAULT_INPUTS = {
   p_growth: 1.5,
   p_graph_shade: DEFAULT_GRAPH_SHADE,
   p_line_sep: DEFAULT_LINE_SEPARATION,
+  p_hatch_width: DEFAULT_HATCH_WIDTH,
   p_hatch_strength: DEFAULT_HATCH_STRENGTH,
   p_margin_goal: 15,
   p_graph_hover: true,

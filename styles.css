@@ -375,13 +375,15 @@ input[type="range"] {
 }
 
 .chart-box,
-.chart-box-sm {
+.chart-box-sm,
+.chart-box-mid {
   max-width: 100%;
   position: relative;
 }
 
 .chart-box canvas,
-.chart-box-sm canvas {
+.chart-box-sm canvas,
+.chart-box-mid canvas {
   max-width: 100% !important;
 }
 
@@ -392,6 +394,10 @@ input[type="range"] {
 .chart-box-sm {
   height: 260px;
   padding-bottom: 20px;
+}
+
+.chart-box-mid {
+  height: 220px;
 }
 
 .legend {
