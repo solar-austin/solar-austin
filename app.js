@@ -1247,6 +1247,14 @@ function drawMix(data, hoverEnabled, showMw, splitByType, includeSeasonalTop = f
  */
 function drawSeasonality(twh35, loadTwh2035, hoverEnabled, splitByType, marginGoalPct = 15) {
   const toAvgMw = (twh) => (twh * MWH_PER_TWH) / HOURS_PER_YEAR;
+  const getSeasonalityAvgMwForKey = (key) => {
+    // Keep baseload aligned with reliability logic (available every hour as entered MW).
+    if (key === 'gasBase') {
+      const gasBaseMw = Number(document.getElementById('p_gas_base')?.value);
+      return Number.isFinite(gasBaseMw) ? Math.max(0, gasBaseMw) : 0;
+    }
+    return toAvgMw(twh35[key] ?? 0);
+  };
   const marginGoal = Number.isFinite(marginGoalPct) ? marginGoalPct : 0;
   const loadAvgMw = toAvgMw(loadTwh2035);
   const usageMonthly = LOAD_SEASONAL_PROFILE.map((f) => loadAvgMw * f);
@@ -1265,7 +1273,7 @@ function drawSeasonality(twh35, loadTwh2035, hoverEnabled, splitByType, marginGo
   const seasonKeysNoGap = ['nuke', 'gasBase', 'gasPeak', 'coal', 'geo', 'exWind', 'newWind', 'exSolar', 'newSolar', 'distSolar'];
   const seasonalSeries = {};
   seasonKeysNoGap.forEach((key) => {
-    const annualAvgMw = toAvgMw(twh35[key] ?? 0);
+    const annualAvgMw = getSeasonalityAvgMwForKey(key);
     const profile = getProfileForKey(key);
     seasonalSeries[key] = profile.map((f) => annualAvgMw * f);
   });
@@ -1316,9 +1324,7 @@ function drawSeasonality(twh35, loadTwh2035, hoverEnabled, splitByType, marginGo
     const useHatch = entry.isNew;
     const fillColor = entry.fillColor;
     const baseBorderColor = entry.borderColor;
-    const oldNewBoundaryColor = isSplitByType
-      ? getOldNewBoundaryColor(entry.key)
-      : (entry.key === 'existingPower' ? getHatchStripeColor(powerGroupStyles.newGeneration.fill, 'newGeneration') : null);
+    const oldNewBoundaryColor = isSplitByType ? getOldNewBoundaryColor(entry.key) : null;
     const borderColor = oldNewBoundaryColor || baseBorderColor;
     const combinedGroupBorder = !isSplitByType && entry.key === 'newGeneration';
     const splitBorderWidth = isSplitByType && SPLIT_OUTER_BORDER_KEYS.has(entry.key) ? 1 : 0;
