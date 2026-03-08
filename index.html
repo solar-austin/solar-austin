@@ -52,7 +52,7 @@
       </div>
       <div class="row">
         <div class="row-head">
-          <span class="swatch" style="background: #E09328"></span>
+          <span class="swatch" style="background: #DDAA1F"></span>
           <span class="lbl has-tooltip" title="Total utility solar power in 2035 (MW), including existing contracts after degradation. New utility solar in 2035 is total utility solar minus existing utility solar in 2035.">Utility Solar</span>
         </div>
         <div class="slider-wrap"><input type="range" id="p_solar" min="806" max="5000" value="967" data-default="967"></div>
@@ -190,6 +190,14 @@
           </div>
           <div class="slider-wrap"><input type="range" id="p_hatch_strength" min="0" max="100" step="1" value="50" data-default="50" data-snap="false"></div>
           <span class="val" id="v_hatch_strength">50%</span>
+        </div>
+        <div class="row">
+          <div class="row-head">
+            <span class="swatch" style="background: #dc2626"></span>
+            <span class="lbl has-tooltip" title="Controls the width of the alternating red and white vertical bars used for deficit/gap areas in charts.">Deficit Stripe Width</span>
+          </div>
+          <div class="slider-wrap"><input type="range" id="p_deficit_width" min="1" max="16" step="1" value="5" data-default="5" data-snap="false"></div>
+          <span class="val" id="v_deficit_width">5 px</span>
         </div>
         <div class="row">
           <div class="row-head">

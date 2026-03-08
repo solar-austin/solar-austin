@@ -27,6 +27,7 @@ const DEFAULT_GRAPH_SHADE = 25;
 const DEFAULT_LINE_SEPARATION = 5;
 const DEFAULT_HATCH_WIDTH = 1;
 const DEFAULT_HATCH_STRENGTH = 50;
+const DEFAULT_DEFICIT_STRIPE_WIDTH = 5;
 const DEFAULT_PANEL_ROUNDING = 8;
 const DEFAULT_PANEL_SHADOW = 50;
 
@@ -46,7 +47,7 @@ function hexToRgb(hex) {
 }
 
 const SHADE_OFFSETS = { borderToBlack: 0.28 };
-const FAMILY_BASE_COLORS = { wind: '#4FC3F7', solar: '#E09328', distributed: '#C9852F', geo: '#9A6346', combined: '#43A047' };
+const FAMILY_BASE_COLORS = { wind: '#4FC3F7', solar: '#DDAA1F', distributed: '#C9852F', geo: '#9A6346', combined: '#43A047' };
 const SPLIT_COLOR_FAMILIES = { exWind: 'wind', newWind: 'wind', exSolar: 'solar', newSolar: 'solar', distSolar: 'distributed', geo: 'geo' };
 
 function getShadedFillColor(hex) {
@@ -81,6 +82,12 @@ function getHatchStrengthScale() {
   return Math.max(0, Math.min(100, pct)) / 100;
 }
 
+function getDeficitStripeWidth() {
+  const raw = Number(document.getElementById('p_deficit_width')?.value);
+  const px = Number.isFinite(raw) ? raw : DEFAULT_DEFICIT_STRIPE_WIDTH;
+  return Math.max(1, Math.min(16, px));
+}
+
 function getFamilyShades(family) {
   const base = FAMILY_BASE_COLORS[family];
   if (!base) return null;
@@ -110,8 +117,8 @@ const STYLES = {
   dr: { c: '#14b8a6', l: 'Demand Response' },
   exWind: { c: '#B3E5FC', l: 'Exist. Wind' },   // light blue
   newWind: { c: '#4FC3F7', l: 'New Wind' },     // dark blue (same hue)
-  exSolar: { c: '#FFDDA0', l: 'Exist. Utility Solar' }, // light orange (same hue as New Solar)
-  newSolar: { c: '#E09328', l: 'New Utility Solar' },   // dark orange (same hue)
+  exSolar: { c: '#F2D778', l: 'Exist. Utility Solar' }, // light golden yellow (same hue as New Solar)
+  newSolar: { c: '#DDAA1F', l: 'New Utility Solar' },   // warm yellow-gold (same hue)
   distSolar: { c: '#C9852F', l: 'Distributed Solar' },
   geo: { c: '#9A6346', l: 'New Geo' },
   gap: { c: '#E57373', l: 'Deficit' },
@@ -373,6 +380,7 @@ function update() {
   const lineSep = +document.getElementById('p_line_sep').value;
   const hatchWidth = +document.getElementById('p_hatch_width').value;
   const hatchStrength = +document.getElementById('p_hatch_strength').value;
+  const deficitWidth = +document.getElementById('p_deficit_width').value;
   const panelRounding = +document.getElementById('p_panel_rounding').value;
   const panelShadow = +document.getElementById('p_panel_shadow').value;
 
@@ -398,6 +406,7 @@ function update() {
   document.getElementById('v_line_sep').textContent = lineSep + ' px';
   document.getElementById('v_hatch_width').textContent = hatchWidth + ' px';
   document.getElementById('v_hatch_strength').textContent = hatchStrength + '%';
+  document.getElementById('v_deficit_width').textContent = deficitWidth + ' px';
   document.getElementById('v_panel_rounding').textContent = panelRounding + ' px';
   document.getElementById('v_panel_shadow').textContent = panelShadow + '%';
   document.getElementById('v_margin_goal').textContent = marginGoalPct + '%';
@@ -839,13 +848,16 @@ function getHatchStripeTone(hexColor, colorKey = '') {
   const g = (n >> 8) & 255;
   const b = n & 255;
   const isGeothermal = colorKey === 'geo';
-  const baseTint = isGeothermal ? 0.22 : 0.35;
+  const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  // Light fills (like light solar) need darker hatch lines for legibility.
+  const useDarkStripes = luminance > 175;
+  const baseTint = isGeothermal ? 0.22 : (useDarkStripes ? 0.42 : 0.35);
   const strengthScale = getHatchStrengthScale();
   // Pivot at 50% so higher strength always increases contrast/visibility.
   const tintAdjusted = Math.max(0.04, Math.min(0.82, baseTint + (strengthScale - 0.5) * 0.35));
-  const targetR = 255;
-  const targetG = isGeothermal ? 232 : 255;
-  const targetB = isGeothermal ? 212 : 255;
+  const targetR = useDarkStripes ? 34 : 255;
+  const targetG = useDarkStripes ? (isGeothermal ? 34 : 36) : (isGeothermal ? 232 : 255);
+  const targetB = useDarkStripes ? (isGeothermal ? 28 : 38) : (isGeothermal ? 212 : 255);
   return {
     r,
     g,
@@ -909,7 +921,7 @@ function createCrosshatchPattern(ctx, hexColor, colorKey = '') {
 
 /** Creates thick vertical stripes for deficit/gap fills. */
 function createVerticalStripePattern(ctx, hexColor) {
-  const stripeWidth = 5;
+  const stripeWidth = getDeficitStripeWidth();
   const stripeSpacing = stripeWidth * 2;
   const tileRepeats = 4;
   const size = stripeSpacing * tileRepeats;
@@ -1665,6 +1677,7 @@ const DEFAULT_INPUTS = {
   p_line_sep: DEFAULT_LINE_SEPARATION,
   p_hatch_width: DEFAULT_HATCH_WIDTH,
   p_hatch_strength: DEFAULT_HATCH_STRENGTH,
+  p_deficit_width: DEFAULT_DEFICIT_STRIPE_WIDTH,
   p_panel_rounding: DEFAULT_PANEL_ROUNDING,
   p_panel_shadow: DEFAULT_PANEL_SHADOW,
   p_margin_goal: 15,
