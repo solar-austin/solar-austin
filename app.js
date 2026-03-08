@@ -135,6 +135,9 @@ const PROF = {
   solar: [0, 0, 0, 0, 0, 0, 0.05, 0.2, 0.45, 0.65, 0.85, 0.95, 1.0, 0.95, 0.85, 0.65, 0.40, 0.15, 0.02, 0, 0, 0, 0, 0],
   wind: [0.5, 0.45, 0.4, 0.35, 0.3, 0.25, 0.2, 0.15, 0.1, 0.1, 0.15, 0.2, 0.25, 0.2, 0.15, 0.15, 0.2, 0.25, 0.35, 0.45, 0.55, 0.6, 0.6, 0.55],
 };
+const REL_INTERVALS_PER_HOUR = 1; // Hourly reliability resolution.
+const REL_STEPS_PER_DAY = 24 * REL_INTERVALS_PER_HOUR;
+const REL_DT_HOURS = 1 / REL_INTERVALS_PER_HOUR;
 const SEASON_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const SEASON_MONTH_HOURS = [744, 672, 744, 720, 744, 720, 744, 744, 720, 744, 720, 744];
 
@@ -466,21 +469,22 @@ function update() {
     data.gap.push(Math.max(0, yrLoad - totalSup));
   }
 
-  // Carbon Free Calculation (Excludes Gas and Market Gap)
   const lastIdx = YEARS - 1;
   const total2035 = data.load[lastIdx];
-  const carbonSources = data.gasBase[lastIdx] + data.gasPeak[lastIdx] + data.coal[lastIdx] + data.gap[lastIdx];
-  const carbonFreePct = Math.max(0, ((total2035 - carbonSources) / total2035) * 100);
-  document.getElementById('k_clean').textContent = carbonFreePct.toFixed(0) + '%';
 
   setMixUnitsLabel(mixShowMw);
   drawMix(data, graphHoverEnabled, mixShowMw, splitByType);
   const rel = runReliability(...getReliabilityArgs(nukeMW, windTargetMw, solarTargetMw, distSolarTargetMw, geoTargetMw, batt, gasBase, gasPeak, coal, ee, dr, growth, marginGoalPct));
+  const peakerUsageTwh35 = getAnnualizedPeakerTwhFromReliability(rel);
+  // Carbon Free Calculation (Excludes Gas and Deficit). Peaker is usage-based from reliability dispatch.
+  const carbonSources = data.gasBase[lastIdx] + peakerUsageTwh35 + data.coal[lastIdx] + data.gap[lastIdx];
+  const carbonFreePct = total2035 > 0 ? Math.max(0, ((total2035 - carbonSources) / total2035) * 100) : 0;
+  document.getElementById('k_clean').textContent = carbonFreePct.toFixed(0) + '%';
   drawRel(rel, graphHoverEnabled, splitByType, marginGoalPct);
 
   // Supply margin: minimum hourly (supply - load) / load as %, from reliability run
   let marginPct = 0;
-  for (let h = 0; h < 24; h++) {
+  for (let h = 0; h < rel.sim.load.length; h++) {
     const l = rel.sim.load[h];
     if (l > 0) {
       const m = ((rel.sim.supply[h] - l) / l) * 100;
@@ -498,7 +502,7 @@ function update() {
   const twh35 = {
     nuke: data.nuke[lastIdx],
     gasBase: data.gasBase[lastIdx],
-    gasPeak: data.gasPeak[lastIdx],
+    gasPeak: peakerUsageTwh35,
     coal: data.coal[lastIdx],
     ee: data.ee[lastIdx],
     dr: data.dr[lastIdx],
@@ -644,94 +648,141 @@ function getTwh2035(nukeMW, windTargetMw, solarTargetMw, distSolarTargetMw, geoT
 /**
  * Runs a 24-hour August peak stress test. Supply = gas (baseload always, peaker only at peak), coal, geo, solar, wind, plus battery.
  * Battery fills deficits first (charge from surplus hours, discharge to deficit hours); peaker only covers remaining shortfall after battery.
- * Two-pass battery in order 0..23 with carry-over. Power limit = batt MW, energy capacity = 4h.
+ * Two-pass battery in hourly steps with carry-over. Power limit = batt MW, energy capacity = 4h.
  */
 function runReliability(nukeMW, exSolarMW, exWindMW, newSolarMW, newDistSolarMW, newWindMW, geo, gasBase, gasPeak, coal, ee, dr, batt, growth, marginGoalPct) {
+  const expandHourlyProfile = (hourlyProfile) => {
+    const out = [];
+    for (let h = 0; h < 24; h++) {
+      for (let q = 0; q < REL_INTERVALS_PER_HOUR; q++) {
+        out.push(hourlyProfile[h]);
+      }
+    }
+    return out;
+  };
   const peak = 3150 * Math.pow(1 + growth / 100, 10);
   const E_cap = batt * 4; // MWh, 4-hour duration
   const eeFirm = ee * 0.7; // 70% of EE reduces load (MW) during stress
   const marginGoal = (marginGoalPct ?? 15) / 100;
   const sol = exSolarMW + newSolarMW + newDistSolarMW;
   const win = exWindMW + newWindMW;
+  const loadProfile = expandHourlyProfile(PROF.load);
+  const solarProfile = expandHourlyProfile(PROF.solar);
+  const windProfile = expandHourlyProfile(PROF.wind);
 
   // DR profile from headroom (supply − load): shift load toward hours with spare capacity (e.g. baseload at night, solar at midday).
-  const grossLoadByHour = Array.from({ length: 24 }, (_, h) => PROF.load[h] * peak);
-  const supplyAvail = Array.from({ length: 24 }, (_, h) =>
-    nukeMW + gasBase + coal + geo + sol * PROF.solar[h] + win * PROF.wind[h]
+  const grossLoadByStep = Array.from({ length: REL_STEPS_PER_DAY }, (_, s) => loadProfile[s] * peak);
+  const supplyAvail = Array.from({ length: REL_STEPS_PER_DAY }, (_, s) =>
+    nukeMW + gasBase + coal + geo + sol * solarProfile[s] + win * windProfile[s]
   );
-  const headroom = supplyAvail.map((s, h) => s - grossLoadByHour[h]);
-  const meanHeadroom = headroom.reduce((a, b) => a + b, 0) / 24;
+  const headroom = supplyAvail.map((s, i) => s - grossLoadByStep[i]);
+  const meanHeadroom = headroom.reduce((a, b) => a + b, 0) / REL_STEPS_PER_DAY;
   const drDev = headroom.map((hr) => meanHeadroom - hr);
   const maxDrDev = Math.max(...drDev);
-  const drProfile = maxDrDev > 0 ? drDev.map((d) => d / maxDrDev) : Array(24).fill(0);
+  const drProfile = maxDrDev > 0 ? drDev.map((d) => d / maxDrDev) : Array(REL_STEPS_PER_DAY).fill(0);
 
   const sim = {
-    load: new Array(24),
-    supply: new Array(24),
-    supplyNoBatt: new Array(24),
-    nuke: new Array(24),
-    gasBase: new Array(24),
-    coal: new Array(24),
-    geo: new Array(24),
-    exSolar: new Array(24),
-    exWind: new Array(24),
-    newSolar: new Array(24),
-    distSolar: new Array(24),
-    newWind: new Array(24),
-    peaker: new Array(24),
-    discharge: new Array(24),
+    load: new Array(REL_STEPS_PER_DAY),
+    supply: new Array(REL_STEPS_PER_DAY),
+    supplyNoBatt: new Array(REL_STEPS_PER_DAY),
+    nuke: new Array(REL_STEPS_PER_DAY),
+    gasBase: new Array(REL_STEPS_PER_DAY),
+    coal: new Array(REL_STEPS_PER_DAY),
+    geo: new Array(REL_STEPS_PER_DAY),
+    exSolar: new Array(REL_STEPS_PER_DAY),
+    exWind: new Array(REL_STEPS_PER_DAY),
+    newSolar: new Array(REL_STEPS_PER_DAY),
+    distSolar: new Array(REL_STEPS_PER_DAY),
+    newWind: new Array(REL_STEPS_PER_DAY),
+    peaker: new Array(REL_STEPS_PER_DAY),
+    discharge: new Array(REL_STEPS_PER_DAY),
   };
-  const chargeHeadroom = new Array(24);
-  const def = new Array(24);
+  const chargeHeadroom = new Array(REL_STEPS_PER_DAY);
+  const targetByStep = new Array(REL_STEPS_PER_DAY);
+  const shortfallToTarget = new Array(REL_STEPS_PER_DAY);
+  const requiredBattForTarget = new Array(REL_STEPS_PER_DAY);
 
   // Pass 1: EE/DR; compute surplus/deficit vs target using generation only (no peaker, no battery).
-  // Battery will fill deficits first; peaker only used for what battery can't cover.
-  for (let h = 0; h < 24; h++) {
-    const grossLoad = PROF.load[h] * peak;
-    const netLoad = Math.max(0, grossLoad - eeFirm - dr * drProfile[h]);
-    sim.load[h] = netLoad;
+  // Battery charging only uses surplus above the reserve target so margin comes first.
+  for (let s = 0; s < REL_STEPS_PER_DAY; s++) {
+    const grossLoad = loadProfile[s] * peak;
+    const netLoad = Math.max(0, grossLoad - eeFirm - dr * drProfile[s]);
+    sim.load[s] = netLoad;
     const targetSupply = netLoad * (1 + marginGoal);
-    const solarMW = sol * PROF.solar[h];
-    const windMW = win * PROF.wind[h];
-    sim.exSolar[h] = exSolarMW * PROF.solar[h];
-    sim.exWind[h] = exWindMW * PROF.wind[h];
-    sim.newSolar[h] = newSolarMW * PROF.solar[h];
-    sim.distSolar[h] = newDistSolarMW * PROF.solar[h];
-    sim.newWind[h] = newWindMW * PROF.wind[h];
+    targetByStep[s] = targetSupply;
+    const solarMW = sol * solarProfile[s];
+    const windMW = win * windProfile[s];
+    sim.exSolar[s] = exSolarMW * solarProfile[s];
+    sim.exWind[s] = exWindMW * windProfile[s];
+    sim.newSolar[s] = newSolarMW * solarProfile[s];
+    sim.distSolar[s] = newDistSolarMW * solarProfile[s];
+    sim.newWind[s] = newWindMW * windProfile[s];
     const supplyNoPeaker = nukeMW + gasBase + coal + geo + solarMW + windMW;
-    // Charge from real excess above load (not above reserve target), so storage can cycle daily.
-    chargeHeadroom[h] = Math.max(0, supplyNoPeaker - netLoad);
-    def[h] = Math.max(0, targetSupply - supplyNoPeaker);
-    sim.nuke[h] = nukeMW;
-    sim.gasBase[h] = gasBase;
-    sim.coal[h] = coal;
-    sim.geo[h] = geo;
-    sim.peaker[h] = 0; // set in pass 2 after battery
+    // Charge only from surplus above the reserve target.
+    chargeHeadroom[s] = Math.max(0, supplyNoPeaker - targetSupply);
+    shortfallToTarget[s] = Math.max(0, targetSupply - supplyNoPeaker);
+    // Minimum battery power needed in this step to hit reserve target after max peaker use.
+    requiredBattForTarget[s] = Math.max(0, shortfallToTarget[s] - gasPeak);
+    sim.nuke[s] = nukeMW;
+    sim.gasBase[s] = gasBase;
+    sim.coal[s] = coal;
+    sim.geo[s] = geo;
+    sim.peaker[s] = 0; // set in pass 2 after battery
   }
-  // Pass 2: start stress day with empty battery, then dispatch battery before peaker each hour.
+  const futureRequiredMWh = new Array(REL_STEPS_PER_DAY + 1).fill(0);
+  const futureChargeMWh = new Array(REL_STEPS_PER_DAY + 1).fill(0);
+  for (let s = REL_STEPS_PER_DAY - 1; s >= 0; s--) {
+    const stepChargeMwCap = Math.min(chargeHeadroom[s], batt);
+    futureRequiredMWh[s] = futureRequiredMWh[s + 1] + requiredBattForTarget[s] * REL_DT_HOURS;
+    futureChargeMWh[s] = futureChargeMWh[s + 1] + stepChargeMwCap * REL_DT_HOURS;
+  }
+
+  // Pass 2: start stress day with empty battery.
+  // Dispatch policy: (1) keep enough SOC to satisfy reserve-target-critical future hours,
+  // then (2) use excess SOC to reduce peaker usage.
   let soc = 0;
-  let risk = 0;
-  for (let h = 0; h < 24; h++) {
-    if (chargeHeadroom[h] > 0) {
-      const charge = Math.min(chargeHeadroom[h], batt, E_cap - soc);
-      soc += charge;
+  let riskHours = 0;
+  for (let s = 0; s < REL_STEPS_PER_DAY; s++) {
+    if (chargeHeadroom[s] > 0) {
+      const chargeMW = Math.min(chargeHeadroom[s], batt, (E_cap - soc) / REL_DT_HOURS);
+      soc += chargeMW * REL_DT_HOURS;
     }
-    let dischargeH = 0;
-    if (def[h] > 0) {
-      dischargeH = Math.min(def[h], batt, soc);
-      soc -= dischargeH;
-    }
-    const supplyNoPeakerH = nukeMW + gasBase + coal + geo + sol * PROF.solar[h] + win * PROF.wind[h];
-    const targetH = sim.load[h] * (1 + marginGoal);
-    const shortfallAfterBatt = Math.max(0, targetH - supplyNoPeakerH - dischargeH);
+    const supplyNoPeakerH = nukeMW + gasBase + coal + geo + sol * solarProfile[s] + win * windProfile[s];
+    const targetH = targetByStep[s];
+    const requiredNowMW = Math.max(0, targetH - supplyNoPeakerH - gasPeak);
+    const mandatoryDischargeMW = Math.min(requiredNowMW, batt, soc / REL_DT_HOURS);
+    soc -= mandatoryDischargeMW * REL_DT_HOURS;
+
+    const shortfallAfterMandatory = Math.max(0, targetH - supplyNoPeakerH - mandatoryDischargeMW);
+    const peakerNeededWithoutOptional = Math.min(gasPeak, shortfallAfterMandatory);
+    const battPowerHeadroom = Math.max(0, batt - mandatoryDischargeMW);
+    const reserveMWh = Math.max(0, futureRequiredMWh[s + 1] - futureChargeMWh[s + 1]);
+    const optionalEnergyMWh = Math.max(0, soc - reserveMWh);
+    const optionalDischargeMW = Math.min(peakerNeededWithoutOptional, battPowerHeadroom, optionalEnergyMWh / REL_DT_HOURS);
+    soc -= optionalDischargeMW * REL_DT_HOURS;
+
+    const dischargeMW = mandatoryDischargeMW + optionalDischargeMW;
+    const shortfallAfterBatt = Math.max(0, targetH - supplyNoPeakerH - dischargeMW);
     const peakerMW = Math.min(gasPeak, shortfallAfterBatt);
-    sim.peaker[h] = peakerMW;
-    sim.supplyNoBatt[h] = supplyNoPeakerH + peakerMW;
-    sim.supply[h] = supplyNoPeakerH + peakerMW + dischargeH;
-    sim.discharge[h] = dischargeH;
-    if (sim.load[h] > sim.supply[h] + 10) risk++;
+    sim.peaker[s] = peakerMW;
+    sim.supplyNoBatt[s] = supplyNoPeakerH + peakerMW;
+    sim.supply[s] = supplyNoPeakerH + peakerMW + dischargeMW;
+    sim.discharge[s] = dischargeMW;
+    if (sim.load[s] > sim.supply[s] + 10) riskHours += REL_DT_HOURS;
   }
-  return { sim, risk };
+  return { sim, risk: riskHours };
+}
+
+/**
+ * Converts peaker dispatch from the representative reliability day into annual TWh.
+ * Uses the simulated average peaker MW and scales to 8,760 hours/year.
+ */
+function getAnnualizedPeakerTwhFromReliability(rel) {
+  const peakerSeries = rel?.sim?.peaker;
+  if (!Array.isArray(peakerSeries) || peakerSeries.length === 0) return 0;
+  const sumMw = peakerSeries.reduce((acc, mw) => acc + (Number.isFinite(mw) ? mw : 0), 0);
+  const avgMw = sumMw / peakerSeries.length;
+  return (avgMw * HOURS_PER_YEAR) / MWH_PER_TWH;
 }
 
 /** Chart.js instances (created on first draw, updated thereafter). */
@@ -744,6 +795,16 @@ function hourToTimeOfDay(hour) {
   if (hour === 0) return '12am';
   if (hour === 12) return '12pm';
   return hour < 12 ? hour + 'am' : hour - 12 + 'pm';
+}
+
+function stepToTimeOfDay(stepIndex) {
+  const totalMinutes = stepIndex * (60 / REL_INTERVALS_PER_HOUR);
+  const hour24 = Math.floor(totalMinutes / 60) % 24;
+  const minute = totalMinutes % 60;
+  if (minute === 0) return hourToTimeOfDay(hour24);
+  const suffix = hour24 < 12 ? 'am' : 'pm';
+  const hour12 = (hour24 % 12) || 12;
+  return `${hour12}:${String(minute).padStart(2, '0')}${suffix}`;
 }
 
 /** Bright red for gap/deficit (top and bottom charts). */
@@ -846,13 +907,10 @@ function createVerticalStripePattern(ctx, hexColor) {
   const { r, g, b } = hexToRgb(hexColor);
   c.fillStyle = `rgba(${r},${g},${b},1)`;
   c.fillRect(0, 0, size, size);
-  c.save();
-  c.globalCompositeOperation = 'destination-out';
-  c.fillStyle = 'rgba(0,0,0,1)';
+  c.fillStyle = 'rgba(255,255,255,1)';
   for (let x = 0; x < size; x += stripeSpacing) {
     c.fillRect(x, 0, stripeWidth, size);
   }
-  c.restore();
   return ctx.createPattern(canvas, 'repeat');
 }
 
@@ -1156,7 +1214,7 @@ function drawSeasonality(twh35, loadTwh2035, hoverEnabled, splitByType) {
       borderWidth: combinedGroupBorder ? 1 : Math.max(splitBorderWidth, oldNewBoundaryWidth),
       fill: true,
       stack: 'stack0',
-      tension: 0.22,
+      tension: REL_PLOT_TENSION,
       cubicInterpolationMode: 'monotone',
       pointRadius: 0,
       hoverPointRadius: 0,
@@ -1172,7 +1230,7 @@ function drawSeasonality(twh35, loadTwh2035, hoverEnabled, splitByType) {
     borderColor: '#111111',
     borderWidth: 2,
     fill: false,
-    tension: 0.22,
+    tension: REL_PLOT_TENSION,
     cubicInterpolationMode: 'monotone',
     pointRadius: 0,
     hoverPointRadius: 0,
@@ -1237,6 +1295,7 @@ function drawSeasonality(twh35, loadTwh2035, hoverEnabled, splitByType) {
 
 /** Battery color in reliability chart (matches sidebar Firm Battery swatch). */
 const REL_BATT_COLOR = '#CE93D8';
+const REL_PLOT_TENSION = 0.22;
 
 /** Reliability chart stack order in split-by-resource mode. */
 const REL_STACK_ORDER = [
@@ -1260,9 +1319,10 @@ const REL_STACK_ORDER = [
  * @param {{ sim: { load, supply, supplyNoBatt, nuke, gasBase, coal, geo, exSolar, exWind, newSolar, distSolar, newWind, peaker, discharge }, risk: number }} rel - Result from runReliability().
  */
 function drawRel(rel, hoverEnabled, splitByType, marginGoalPct) {
-  const labels = Array.from({ length: 24 }, (_, i) => hourToTimeOfDay(i));
-  const deficit = rel.sim.load.map((l, i) => Math.max(0, l - rel.sim.supply[i]));
-  const targetSupply = rel.sim.load.map((l) => l * (1 + (Number.isFinite(marginGoalPct) ? marginGoalPct : 0) / 100));
+  const stepCount = rel.sim.load?.length ?? REL_STEPS_PER_DAY;
+  const labels = Array.from({ length: stepCount }, (_, i) => (i % REL_INTERVALS_PER_HOUR === 0 ? hourToTimeOfDay(i / REL_INTERVALS_PER_HOUR) : ''));
+  const loadSeries = rel.sim.load ?? Array(stepCount).fill(0);
+  const targetSupply = loadSeries.map((l) => l * (1 + (Number.isFinite(marginGoalPct) ? marginGoalPct : 0) / 100));
   const gapDeficitColors = getGapDeficitColors();
   const batteryFill = getShadedFillColor(REL_BATT_COLOR);
   const batteryBorder = getShadedBorderColor(REL_BATT_COLOR);
@@ -1277,38 +1337,41 @@ function drawRel(rel, hoverEnabled, splitByType, marginGoalPct) {
 
   const batteryDataset = {
     label: 'Battery',
-    data: rel.sim.discharge,
-    backgroundColor: hexToRgba(batteryFill, 0.95),
+    data: rel.sim.discharge ?? Array(stepCount).fill(0),
+    backgroundColor: hexToRgba(batteryFill, 1),
     borderColor: batteryBorder,
     borderWidth: 0,
     fill: true,
     stack: 'area',
-    tension: 0,
+    tension: REL_PLOT_TENSION,
+    cubicInterpolationMode: 'monotone',
     pointRadius: 0,
     pointStyle: 'rect',
     order: 1,
   };
   const deficitDataset = {
     label: 'Deficit',
-    data: deficit,
+    data: loadSeries,
     backgroundColor: createVerticalStripePattern(ctx, gapDeficitColors.fillHex),
     borderColor: gapDeficitColors.border,
     borderWidth: 0,
     fill: true,
-    stack: 'area',
-    tension: 0,
+    stack: 'deficitBackdrop',
+    tension: REL_PLOT_TENSION,
+    cubicInterpolationMode: 'monotone',
     pointRadius: 0,
     pointStyle: 'rect',
-    order: 1,
+    order: 5,
   };
   const loadDataset = {
     label: 'Usage',
-    data: rel.sim.load,
+    data: loadSeries,
     backgroundColor: 'transparent',
     borderColor: '#000',
-    borderWidth: 2,
+    borderWidth: 3,
     fill: false,
-    tension: 0,
+    tension: REL_PLOT_TENSION,
+    cubicInterpolationMode: 'monotone',
     pointRadius: 0,
     stack: 'usageOverlay',
     pointStyle: 'line',
@@ -1322,7 +1385,8 @@ function drawRel(rel, hoverEnabled, splitByType, marginGoalPct) {
     borderWidth: 1,
     borderDash: [6, 4],
     fill: false,
-    tension: 0,
+    tension: REL_PLOT_TENSION,
+    cubicInterpolationMode: 'monotone',
     pointRadius: 0,
     stack: 'targetOverlay',
     pointStyle: 'line',
@@ -1331,6 +1395,7 @@ function drawRel(rel, hoverEnabled, splitByType, marginGoalPct) {
 
   const datasets = stackByType
     ? [
+      deficitDataset,
       ...REL_STACK_ORDER.map(({ simKey, styleKey }) => {
         const isNew = NEW_GENERATION_KEYS.includes(styleKey);
         const splitColors = getSplitSeriesColors(styleKey);
@@ -1338,25 +1403,25 @@ function drawRel(rel, hoverEnabled, splitByType, marginGoalPct) {
         const splitBorderWidth = SPLIT_OUTER_BORDER_KEYS.has(styleKey) ? 1 : 0;
         return {
           label: STYLES[styleKey].l,
-          data: rel.sim[simKey] ?? Array(24).fill(0),
-          backgroundColor: isNew ? createCrosshatchPattern(ctx, splitColors.fill, styleKey) : hexToRgba(splitColors.fill, 0.95),
+          data: rel.sim[simKey] ?? Array(stepCount).fill(0),
+          backgroundColor: isNew ? createCrosshatchPattern(ctx, splitColors.fill, styleKey) : hexToRgba(splitColors.fill, 1),
           borderColor: oldNewBoundaryColor || splitColors.border,
           borderWidth: oldNewBoundaryColor ? 1 : splitBorderWidth,
           fill: true,
           stack: 'area',
-          tension: 0,
+          tension: REL_PLOT_TENSION,
+          cubicInterpolationMode: 'monotone',
           pointRadius: 0,
           pointStyle: 'rect',
           order: 1,
         };
       }),
       batteryDataset,
-      deficitDataset,
       targetMarginDataset,
       loadDataset,
     ]
     : (() => {
-      const existingPower = Array.from({ length: 24 }, (_, i) =>
+      const existingPower = Array.from({ length: stepCount }, (_, i) =>
         (rel.sim.nuke[i] ?? 0) +
         (rel.sim.coal[i] ?? 0) +
         (rel.sim.gasBase[i] ?? 0) +
@@ -1364,7 +1429,7 @@ function drawRel(rel, hoverEnabled, splitByType, marginGoalPct) {
         (rel.sim.exWind[i] ?? 0) +
         (rel.sim.exSolar[i] ?? 0)
       );
-      const newGeneration = Array.from({ length: 24 }, (_, i) =>
+      const newGeneration = Array.from({ length: stepCount }, (_, i) =>
         (rel.sim.newWind[i] ?? 0) +
         (rel.sim.distSolar[i] ?? 0) +
         (rel.sim.newSolar[i] ?? 0) +
@@ -1374,12 +1439,13 @@ function drawRel(rel, hoverEnabled, splitByType, marginGoalPct) {
         {
           label: powerGroupStyles.existingPower.l,
           data: existingPower,
-          backgroundColor: hexToRgba(powerGroupStyles.existingPower.fill, 0.95),
+          backgroundColor: hexToRgba(powerGroupStyles.existingPower.fill, 1),
           borderColor: getHatchStripeColor(powerGroupStyles.newGeneration.fill, 'newGeneration'),
           borderWidth: 1,
           fill: true,
           stack: 'area',
-          tension: 0,
+          tension: REL_PLOT_TENSION,
+          cubicInterpolationMode: 'monotone',
           pointRadius: 0,
           pointStyle: 'rect',
           order: 1,
@@ -1392,13 +1458,14 @@ function drawRel(rel, hoverEnabled, splitByType, marginGoalPct) {
           borderWidth: 1,
           fill: true,
           stack: 'area',
-          tension: 0,
+          tension: REL_PLOT_TENSION,
+          cubicInterpolationMode: 'monotone',
           pointRadius: 0,
           pointStyle: 'rect',
           order: 1,
         },
-        batteryDataset,
         deficitDataset,
+        batteryDataset,
         targetMarginDataset,
         loadDataset,
       ];
@@ -1425,6 +1492,7 @@ function drawRel(rel, hoverEnabled, splitByType, marginGoalPct) {
           tooltip: {
             enabled: hoverEnabled,
             callbacks: {
+              title: (items) => (items?.length ? stepToTimeOfDay(items[0].dataIndex) : ''),
               label: (item) => `${item.dataset.label}: ${Math.round(item.raw)} MW`,
             },
           },
@@ -1445,7 +1513,9 @@ function drawRel(rel, hoverEnabled, splitByType, marginGoalPct) {
     });
   }
 
-  document.getElementById('k_risk').textContent = rel.risk;
+  document.getElementById('k_risk').textContent = Number.isInteger(rel.risk)
+    ? String(rel.risk)
+    : rel.risk.toFixed(2).replace(/\.?0+$/, '');
   document.getElementById('risk_card').className = rel.risk > 0 ? 'kpi warn-bg' : 'kpi good-bg';
 }
 
@@ -1528,7 +1598,7 @@ function resetInputs() {
 function getMinMarginPct(nukeMW, windTargetMw, solarTargetMw, distSolarTargetMw, geoTargetMw, batt, gasBase, gasPeak, coal, ee, dr, growth, marginGoalPct) {
   const rel = runReliability(...getReliabilityArgs(nukeMW, windTargetMw, solarTargetMw, distSolarTargetMw, geoTargetMw, batt, gasBase, gasPeak, coal, ee, dr, growth, marginGoalPct));
   let marginPct = 0;
-  for (let h = 0; h < 24; h++) {
+  for (let h = 0; h < rel.sim.load.length; h++) {
     const l = rel.sim.load[h];
     if (l > 0) {
       const m = ((rel.sim.supply[h] - l) / l) * 100;
@@ -1542,12 +1612,15 @@ function getMinMarginPct(nukeMW, windTargetMw, solarTargetMw, distSolarTargetMw,
  * Total cost ($M) for auto-solve: same formula as UI (runFinancials with gen + battery).
  * Energy: vol (TWh) × price ($/MWh) → $M. Battery: batt (MW) × price ($k/MW-yr) / 1000 → $M.
  */
-function totalCostForBuild(nukeMW, windTargetMw, solarTargetMw, distSolarTargetMw, geoTargetMw, batt, gasBase, gasPeak, coal, ee, dr, growth, tx) {
+function totalCostForBuild(nukeMW, windTargetMw, solarTargetMw, distSolarTargetMw, geoTargetMw, batt, gasBase, gasPeak, coal, ee, dr, growth, tx, marginGoalPct) {
   const { twh35 } = getTwh2035(nukeMW, windTargetMw, solarTargetMw, distSolarTargetMw, geoTargetMw, gasBase, gasPeak, coal, ee, dr, growth);
+  const rel = runReliability(...getReliabilityArgs(nukeMW, windTargetMw, solarTargetMw, distSolarTargetMw, geoTargetMw, batt, gasBase, gasPeak, coal, ee, dr, growth, marginGoalPct));
+  const peakerUsageTwh35 = getAnnualizedPeakerTwhFromReliability(rel);
+  const costTwh35 = { ...twh35, gasPeak: peakerUsageTwh35 };
   const remoteKeys = new Set(['nuke', 'coal', 'exWind', 'exSolar', 'newWind', 'newSolar', 'gap']);
   let genCostM = 0;
 
-  Object.entries(twh35).forEach(([k, vol]) => {
+  Object.entries(costTwh35).forEach(([k, vol]) => {
     const baseP = PRICES[k] ?? 0;
     const add = remoteKeys.has(k) ? tx : 0;
     genCostM += (vol * MWH_PER_TWH * (baseP + add)) / DOLLARS_PER_MILLION;
@@ -1592,7 +1665,7 @@ function autoSolve() {
           const minMarginPct = getMinMarginPct(nukeMW, windTargetMw, solarTargetMw, distSolarTargetMw, geoTargetMw, batt, gasBase, gasPeak, coal, ee, dr, growth, goal);
           if (minMarginPct + 1e-9 < goal) continue;
 
-          const totalCostM = totalCostForBuild(nukeMW, windTargetMw, solarTargetMw, distSolarTargetMw, geoTargetMw, batt, gasBase, gasPeak, coal, ee, dr, growth, tx);
+          const totalCostM = totalCostForBuild(nukeMW, windTargetMw, solarTargetMw, distSolarTargetMw, geoTargetMw, batt, gasBase, gasPeak, coal, ee, dr, growth, tx, goal);
           if (totalCostM < best.totalCostM) best = { totalCostM, windTargetMw, solarTargetMw, geoTargetMw, batt };
         }
       }
