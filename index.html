@@ -157,42 +157,68 @@
         <span class="val" id="v_growth">1.5%</span>
       </div>
 
-      <h4 class="input-section">UI Options</h4>
-      <div class="row">
-        <div class="row-head">
-          <span class="swatch" style="background: #666"></span>
-          <span class="lbl has-tooltip" title="Debug control for graph shade. Lower values are darker fills, higher values are lighter fills.">Graph Shade</span>
+      <details class="ui-options-panel">
+        <summary class="input-section">UI Options</summary>
+        <div class="row">
+          <div class="row-head">
+            <span class="swatch" style="background: #666"></span>
+            <span class="lbl has-tooltip" title="Debug control for graph shade. Lower values are darker fills, higher values are lighter fills.">Graph Shade</span>
+          </div>
+          <div class="slider-wrap"><input type="range" id="p_graph_shade" min="0" max="100" step="1" value="25" data-default="25" data-snap="false"></div>
+          <span class="val" id="v_graph_shade">25%</span>
         </div>
-        <div class="slider-wrap"><input type="range" id="p_graph_shade" min="0" max="100" step="1" value="25" data-default="25" data-snap="false"></div>
-        <span class="val" id="v_graph_shade">25%</span>
-      </div>
-      <div class="row">
-        <div class="row-head">
-          <span class="swatch" style="background: #777"></span>
-          <span class="lbl has-tooltip" title="Debug control for diagonal-line spacing in textures. Lower values pack lines closer together.">Line Separation</span>
+        <div class="row">
+          <div class="row-head">
+            <span class="swatch" style="background: #777"></span>
+            <span class="lbl has-tooltip" title="Debug control for diagonal-line spacing in textures. Lower values pack lines closer together.">Line Separation</span>
+          </div>
+          <div class="slider-wrap"><input type="range" id="p_line_sep" min="1" max="24" step="1" value="5" data-default="5" data-snap="false"></div>
+          <span class="val" id="v_line_sep">5 px</span>
         </div>
-        <div class="slider-wrap"><input type="range" id="p_line_sep" min="1" max="24" step="1" value="5" data-default="5" data-snap="false"></div>
-        <span class="val" id="v_line_sep">5 px</span>
-      </div>
-      <div class="row">
-        <div class="row-head">
-          <span class="swatch" style="background: #7f7f7f"></span>
-          <span class="lbl has-tooltip" title="Controls the thickness of each diagonal hatch line in pixels.">Crosshatch Width</span>
+        <div class="row">
+          <div class="row-head">
+            <span class="swatch" style="background: #7f7f7f"></span>
+            <span class="lbl has-tooltip" title="Controls the thickness of each diagonal hatch line in pixels.">Crosshatch Width</span>
+          </div>
+          <div class="slider-wrap"><input type="range" id="p_hatch_width" min="1" max="12" step="1" value="1" data-default="1" data-snap="false"></div>
+          <span class="val" id="v_hatch_width">1 px</span>
         </div>
-        <div class="slider-wrap"><input type="range" id="p_hatch_width" min="1" max="12" step="1" value="1" data-default="1" data-snap="false"></div>
-        <span class="val" id="v_hatch_width">1 px</span>
-      </div>
-      <div class="row">
-        <div class="row-head">
-          <span class="swatch" style="background: #888"></span>
-          <span class="lbl has-tooltip" title="Controls texture intensity for hatched areas. 0 = off, 100 = full strength.">Hatch Strength</span>
+        <div class="row">
+          <div class="row-head">
+            <span class="swatch" style="background: #888"></span>
+            <span class="lbl has-tooltip" title="Controls texture intensity for hatched areas. 0 = off, 100 = full strength.">Hatch Strength</span>
+          </div>
+          <div class="slider-wrap"><input type="range" id="p_hatch_strength" min="0" max="100" step="1" value="50" data-default="50" data-snap="false"></div>
+          <span class="val" id="v_hatch_strength">50%</span>
         </div>
-        <div class="slider-wrap"><input type="range" id="p_hatch_strength" min="0" max="100" step="1" value="50" data-default="50" data-snap="false"></div>
-        <span class="val" id="v_hatch_strength">50%</span>
-      </div>
+        <div class="row">
+          <div class="row-head">
+            <span class="swatch" style="background: #9aa0a6"></span>
+            <span class="lbl has-tooltip" title="Rounds white panel corners. 0 = square corners.">Panel Corner Rounding</span>
+          </div>
+          <div class="slider-wrap"><input type="range" id="p_panel_rounding" min="0" max="24" step="1" value="8" data-default="8" data-snap="false"></div>
+          <span class="val" id="v_panel_rounding">8 px</span>
+        </div>
+        <div class="row">
+          <div class="row-head">
+            <span class="swatch" style="background: #7d848b"></span>
+            <span class="lbl has-tooltip" title="Adjusts white panel shadow strength. 0 = no shadow.">Panel Shadow</span>
+          </div>
+          <div class="slider-wrap"><input type="range" id="p_panel_shadow" min="0" max="100" step="1" value="50" data-default="50" data-snap="false"></div>
+          <span class="val" id="v_panel_shadow">50%</span>
+        </div>
+      </details>
       <label class="left-toggle">
         <input type="checkbox" id="p_graph_hover" checked onchange="update()">
         <span class="has-tooltip" title="Enable or disable chart hover details (tooltips and hover tracking) on both graphs.">Enable graph hover details</span>
+      </label>
+      <label class="left-toggle">
+        <input type="checkbox" id="rel_stack_by_type" checked onchange="update()">
+        <span class="has-tooltip" title="Applies to all charts. Checked: split by resource type. Unchecked: combine into Existing Power and New Generation.">Split by resource type</span>
+      </label>
+      <label class="left-toggle">
+        <input type="checkbox" id="mix_include_seasonal" onchange="update()">
+        <span class="has-tooltip" title="Top chart only: apply monthly seasonal trends to TWh mode across the full timeline. Nameplate MW mode always stays annual (no seasonal effect).">Include seasonal trends in top chart</span>
       </label>
       <button class="btn-reset" onclick="resetInputs()">Reset</button>
       <button class="btn-solve has-tooltip" onclick="autoSolve()" title="Scale New Wind, New Utility Solar, Geothermal, and Battery until the minimum supply margin reaches 15%. Works for any load growth.">Auto-Solve Reliability Gap</button>
@@ -201,7 +227,7 @@
     <div>
       <div class="card">
         <div class="chart-head">
-          <h3 class="has-tooltip" title="Stacked area chart: supply by resource (nuclear, gas, coal, wind, solar, geo, EE, gap) and total load (Usage line) over the planning horizon. Gap = shortfall met by market purchases.">Austin Energy Resource Mix (<span id="mix_units_lbl">TWh</span>)</h3>
+          <h3 class="has-tooltip" title="Stacked area chart: supply by resource (nuclear, gas, coal, wind, solar, geo, EE, gap) and total load (Usage line) over the planning horizon. Gap = shortfall met by market purchases.">10 year outlook - resource mix (<span id="mix_units_lbl">TWh</span>)</h3>
           <label class="rel-chart-toggle">
             <input type="checkbox" id="mix_units_mw" onchange="update()">
             <span class="has-tooltip" title="Switch top-chart units. TWh = annual energy. Nameplate MW = resource nameplate/effective MW by year; market gap is hidden in this mode.">Show Nameplate MW</span>
@@ -211,17 +237,13 @@
       </div>
       <div class="card">
         <div class="chart-head">
-          <h3 class="has-tooltip" title="2035 monthly seasonality (monthly average MW), using the same resource stacks and styling as the other charts. Load follows an Austin best-guess seasonal profile; solar and wind use best-guess seasonal generation profiles; annual totals stay anchored to your scenario.">2035 Seasonality (Monthly Avg MW)</h3>
+          <h3 class="has-tooltip" title="2035 monthly seasonality (monthly average MW), using the same resource stacks and styling as the other charts. Load follows an Austin best-guess seasonal profile; solar and wind use best-guess seasonal generation profiles; annual totals stay anchored to your scenario.">2035 full year (Monthly Avg MW)</h3>
         </div>
         <div class="chart-box-mid"><canvas id="seasonChart"></canvas></div>
       </div>
       <div class="card">
         <div class="chart-head">
-          <h3 class="has-tooltip" title="Simulated August peak day: 24-hour supply vs load (MW). Shows whether the system meets load with the margin goal; deficit (red) and risk hours indicate shortfalls.">August Peak Reliability (24-Hour Stress Test)</h3>
-          <label class="rel-chart-toggle">
-            <input type="checkbox" id="rel_stack_by_type" checked onchange="update()">
-            <span class="has-tooltip" title="Applies to all charts. Checked: split by resource type. Unchecked: combine into Existing Power and New Generation.">Split by resource type</span>
-          </label>
+          <h3 class="has-tooltip" title="Simulated August peak day: 24-hour supply vs load (MW). Shows whether the system meets load with the margin goal; deficit (red) and risk hours indicate shortfalls.">2035 Peak reliability (24-Hour Stress Test)</h3>
         </div>
         <div class="chart-box-sm"><canvas id="relChart"></canvas></div>
       </div>

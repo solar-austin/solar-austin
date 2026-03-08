@@ -27,6 +27,8 @@ const DEFAULT_GRAPH_SHADE = 25;
 const DEFAULT_LINE_SEPARATION = 5;
 const DEFAULT_HATCH_WIDTH = 1;
 const DEFAULT_HATCH_STRENGTH = 50;
+const DEFAULT_PANEL_ROUNDING = 8;
+const DEFAULT_PANEL_SHADOW = 50;
 
 function blendHex(hex, targetHex, amount) {
   const a = Math.max(0, Math.min(1, amount));
@@ -365,11 +367,14 @@ function update() {
   const batt = +document.getElementById('p_batt').value;
   const graphHoverEnabled = document.getElementById('p_graph_hover').checked;
   const mixShowMw = document.getElementById('mix_units_mw').checked;
+  const mixIncludeSeasonal = document.getElementById('mix_include_seasonal')?.checked ?? false;
   const splitByType = document.getElementById('rel_stack_by_type').checked;
   const graphShade = +document.getElementById('p_graph_shade').value;
   const lineSep = +document.getElementById('p_line_sep').value;
   const hatchWidth = +document.getElementById('p_hatch_width').value;
   const hatchStrength = +document.getElementById('p_hatch_strength').value;
+  const panelRounding = +document.getElementById('p_panel_rounding').value;
+  const panelShadow = +document.getElementById('p_panel_shadow').value;
 
   const buildPlan = getBuildPlanFromTargets(windTargetMw, solarTargetMw, distSolarTargetMw, YEARS - 1);
   const geoAnnualMw = getAnnualBuildFromTarget(geoTargetMw, YEARS - 1);
@@ -393,7 +398,15 @@ function update() {
   document.getElementById('v_line_sep').textContent = lineSep + ' px';
   document.getElementById('v_hatch_width').textContent = hatchWidth + ' px';
   document.getElementById('v_hatch_strength').textContent = hatchStrength + '%';
+  document.getElementById('v_panel_rounding').textContent = panelRounding + ' px';
+  document.getElementById('v_panel_shadow').textContent = panelShadow + '%';
   document.getElementById('v_margin_goal').textContent = marginGoalPct + '%';
+  const rootStyle = document.documentElement.style;
+  rootStyle.setProperty('--panel-radius', `${Math.max(0, panelRounding)}px`);
+  const clampedShadow = Math.max(0, Math.min(100, panelShadow));
+  rootStyle.setProperty('--panel-shadow-y', `${((clampedShadow / 100) * 2).toFixed(2)}px`);
+  rootStyle.setProperty('--panel-shadow-blur', `${((clampedShadow / 100) * 8).toFixed(2)}px`);
+  rootStyle.setProperty('--panel-shadow-alpha', ((clampedShadow / 100) * 0.2).toFixed(3));
   document.getElementById('v_nuke').innerHTML = `${nukeMW} MW<span class="val-total">${annualBuildLabel(nukeAnnualDelta)}</span>`;
   document.getElementById('v_solar').innerHTML = `${solarTargetMw} MW<span class="val-total">${annualBuildLabel(buildPlan.solarAnnualMw)}</span>`;
   document.getElementById('v_dist_solar').innerHTML = `${distSolarTargetMw} MW<span class="val-total">${annualBuildLabel(buildPlan.distSolarAnnualMw)}</span>`;
@@ -473,7 +486,7 @@ function update() {
   const total2035 = data.load[lastIdx];
 
   setMixUnitsLabel(mixShowMw);
-  drawMix(data, graphHoverEnabled, mixShowMw, splitByType);
+  drawMix(data, graphHoverEnabled, mixShowMw, splitByType, mixIncludeSeasonal, marginGoalPct);
   const rel = runReliability(...getReliabilityArgs(nukeMW, windTargetMw, solarTargetMw, distSolarTargetMw, geoTargetMw, batt, gasBase, gasPeak, coal, ee, dr, growth, marginGoalPct));
   const peakerUsageTwh35 = getAnnualizedPeakerTwhFromReliability(rel);
   // Carbon Free Calculation (Excludes Gas and Deficit). Peaker is usage-based from reliability dispatch.
@@ -514,7 +527,7 @@ function update() {
     distSolar: data.distSolar[lastIdx],
     gap: data.gap[lastIdx],
   };
-  drawSeasonality(twh35, total2035, graphHoverEnabled, splitByType);
+  drawSeasonality(twh35, total2035, graphHoverEnabled, splitByType, marginGoalPct);
   const totCostM = runFinancials(twh35, tx, total2035, batt);
   const rateCents = total2035 > 0 ? (totCostM / total2035 / 10) : 0;
   document.getElementById('k_rate').textContent = rateCents.toFixed(1) + '¢';
@@ -931,6 +944,8 @@ function getSplitSeriesColors(styleKey) {
  */
 /** Alpha for top-chart stack fill (1 = fully opaque). */
 const MIX_FILL_ALPHA = 1;
+/** Line smoothing amount for top chart when seasonality mode is enabled. */
+const MIX_SEASONAL_LINE_TENSION = 0.28;
 
 function hexToRgba(hex, alpha) {
   const n = parseInt(hex.slice(1), 16);
@@ -952,27 +967,76 @@ function setMixUnitsLabel(showMw) {
   if (el) el.textContent = showMw ? 'Nameplate MW' : 'TWh';
 }
 
-function drawMix(data, hoverEnabled, showMw, splitByType) {
-  const labels = Array.from({ length: YEARS }, (_, i) => String(BASE_YEAR + i));
+function getMixSeasonalProfileForKey(key) {
+  if (key === 'load') return LOAD_SEASONAL_PROFILE;
+  if (key === 'exWind' || key === 'newWind') return WIND_SEASONAL_PROFILE;
+  if (key === 'exSolar' || key === 'newSolar' || key === 'distSolar') return SOLAR_SEASONAL_PROFILE;
+  return Array(SEASON_MONTHS.length).fill(1);
+}
+
+/**
+ * Expands annual top-chart series into monthly points across the full planning horizon.
+ * Variable resources and load get monthly seasonal factors; gap is recomputed monthly from load-supply.
+ */
+function buildSeasonalMixTimeline(data) {
+  const labels = [];
+  const seasonalSeries = {};
+  const sourceKeysNoGap = MIX_SPLIT_KEYS.filter((key) => key !== 'gap');
+  const expandedKeys = [...sourceKeysNoGap, 'gap', 'load'];
+  expandedKeys.forEach((key) => { seasonalSeries[key] = []; });
+
+  for (let y = 0; y < YEARS; y++) {
+    const year = BASE_YEAR + y;
+    for (let m = 0; m < SEASON_MONTHS.length; m++) {
+      labels.push(`${SEASON_MONTHS[m]} ${year}`);
+      sourceKeysNoGap.forEach((key) => {
+        const annualVal = data[key]?.[y] ?? 0;
+        const profile = getMixSeasonalProfileForKey(key);
+        seasonalSeries[key].push(annualVal * profile[m]);
+      });
+      const annualLoad = data.load?.[y] ?? 0;
+      seasonalSeries.load.push(annualLoad * LOAD_SEASONAL_PROFILE[m]);
+    }
+  }
+
+  seasonalSeries.gap = seasonalSeries.load.map((loadVal, idx) => {
+    const supplyNoGap = sourceKeysNoGap.reduce((sum, key) => sum + (seasonalSeries[key]?.[idx] ?? 0), 0);
+    return Math.max(0, loadVal - supplyNoGap);
+  });
+
+  return { labels, seasonalSeries };
+}
+
+function drawMix(data, hoverEnabled, showMw, splitByType, includeSeasonalTop = false, marginGoalPct = 15) {
+  const useSeasonal = Boolean(includeSeasonalTop) && !showMw;
+  const lineTension = useSeasonal ? MIX_SEASONAL_LINE_TENSION : 0;
+  const mixSeriesData = useSeasonal ? buildSeasonalMixTimeline(data) : null;
+  const labels = useSeasonal
+    ? mixSeriesData.labels
+    : Array.from({ length: YEARS }, (_, i) => String(BASE_YEAR + i));
+  const seriesByKey = useSeasonal ? mixSeriesData.seasonalSeries : data;
+  const pointCount = labels.length;
   const unitLabel = showMw ? 'MW' : 'TWh';
+  const marginGoal = Number.isFinite(marginGoalPct) ? marginGoalPct : 0;
   const yMax = getMixAxisMax(showMw);
   const gapDeficitColors = getGapDeficitColors();
   const powerGroupStyles = getPowerGroupStyles();
   const toMwByCf = (series, cf) => series.map((v) => (v * MWH_PER_TWH) / (HOURS_PER_YEAR * cf));
-  const sumSeries = (seriesList) => Array.from({ length: YEARS }, (_, i) => seriesList.reduce((sum, s) => sum + (s[i] ?? 0), 0));
+  const sumSeries = (seriesList) => Array.from({ length: pointCount }, (_, i) => seriesList.reduce((sum, s) => sum + (s[i] ?? 0), 0));
   const convertLoad = (series) => (showMw ? toMixUnits(series, true) : series);
   const convertSeriesForKey = (key) => {
-    if (!showMw) return data[key];
-    if (key === 'gap') return Array(YEARS).fill(0);
-    if (key === 'exWind' || key === 'newWind') return toMwByCf(data[key], CF.wind);
-    if (key === 'exSolar' || key === 'newSolar') return toMwByCf(data[key], CF.solar);
-    if (key === 'distSolar') return toMwByCf(data[key], CF.distSolar);
-    if (key === 'geo') return toMwByCf(data[key], CF.geo);
-    if (key === 'nuke') return toMwByCf(data[key], CF.nuke);
-    if (key === 'gasBase') return toMwByCf(data[key], CF.gasBase);
-    if (key === 'gasPeak') return toMwByCf(data[key], CF.gasPeak);
-    if (key === 'coal') return toMwByCf(data[key], CF.coal);
-    return data[key];
+    const series = seriesByKey[key] ?? Array(pointCount).fill(0);
+    if (!showMw) return series;
+    if (key === 'gap') return Array(pointCount).fill(0);
+    if (key === 'exWind' || key === 'newWind') return toMwByCf(series, CF.wind);
+    if (key === 'exSolar' || key === 'newSolar') return toMwByCf(series, CF.solar);
+    if (key === 'distSolar') return toMwByCf(series, CF.distSolar);
+    if (key === 'geo') return toMwByCf(series, CF.geo);
+    if (key === 'nuke') return toMwByCf(series, CF.nuke);
+    if (key === 'gasBase') return toMwByCf(series, CF.gasBase);
+    if (key === 'gasPeak') return toMwByCf(series, CF.gasPeak);
+    if (key === 'coal') return toMwByCf(series, CF.coal);
+    return series;
   };
 
   const splitEntries = MIX_SPLIT_KEYS.map((key) => ({
@@ -1040,7 +1104,8 @@ function drawMix(data, hoverEnabled, showMw, splitByType) {
       borderWidth: combinedGroupBorder ? 1 : Math.max(splitBorderWidth, oldNewBoundaryWidth),
       fill: true,
       stack: 'stack0',
-      tension: 0,
+      tension: lineTension,
+      cubicInterpolationMode: useSeasonal ? 'monotone' : 'default',
       pointRadius: 0,
       hoverPointRadius: 0,
       pointHitRadius: 20,
@@ -1053,12 +1118,13 @@ function drawMix(data, hoverEnabled, showMw, splitByType) {
   if (!showMw) {
     datasets.push({
       label: 'Usage',
-      data: convertLoad(data.load),
+      data: convertLoad(seriesByKey.load ?? Array(pointCount).fill(0)),
       backgroundColor: 'transparent',
       borderColor: '#000',
       borderWidth: 2,
       fill: false,
-      tension: 0,
+      tension: lineTension,
+      cubicInterpolationMode: useSeasonal ? 'monotone' : 'default',
       pointRadius: 0,
       hoverPointRadius: 0,
       pointHitRadius: 12,
@@ -1068,8 +1134,27 @@ function drawMix(data, hoverEnabled, showMw, splitByType) {
       hidden: false,
     });
   }
+  const usageForMargin = convertLoad(seriesByKey.load ?? Array(pointCount).fill(0));
+  datasets.push({
+    label: `Target Supply (${Math.round(marginGoal)}% Margin)`,
+    data: usageForMargin.map((v) => v * (1 + marginGoal / 100)),
+    backgroundColor: 'transparent',
+    borderColor: '#6b7280',
+    borderWidth: 1,
+    borderDash: [6, 4],
+    fill: false,
+    tension: lineTension,
+    cubicInterpolationMode: useSeasonal ? 'monotone' : 'default',
+    pointRadius: 0,
+    hoverPointRadius: 0,
+    pointHitRadius: 12,
+    stack: 'targetOverlay',
+    order: -90,
+    pointStyle: 'line',
+    hidden: false,
+  });
 
-  const expectedDatasets = entries.length + (showMw ? 0 : 1);
+  const expectedDatasets = entries.length + (showMw ? 1 : 2);
   if (mixChartInstance && mixChartInstance.data.datasets.length !== expectedDatasets) {
     mixChartInstance.destroy();
     mixChartInstance = null;
@@ -1079,7 +1164,18 @@ function drawMix(data, hoverEnabled, showMw, splitByType) {
     mixChartInstance.data.labels = labels;
     mixChartInstance.data.datasets = datasets;
     mixChartInstance.options.plugins.tooltip.enabled = hoverEnabled;
+    mixChartInstance.options.plugins.tooltip.callbacks.title = (items) => (items?.length ? labels[items[0].dataIndex] : '');
     mixChartInstance.options.plugins.tooltip.callbacks.label = (item) => `${item.dataset.label}: ${item.raw.toFixed(1)} ${unitLabel}`;
+    const xTicks = mixChartInstance.options.scales.x.ticks;
+    xTicks.maxRotation = 0;
+    xTicks.minRotation = 0;
+    if (useSeasonal) {
+      xTicks.autoSkip = false;
+      xTicks.callback = (value, index) => (index % SEASON_MONTHS.length === 0 ? String(BASE_YEAR + Math.floor(index / SEASON_MONTHS.length)) : '');
+    } else {
+      xTicks.autoSkip = true;
+      delete xTicks.callback;
+    }
     mixChartInstance.options.scales.y.max = yMax;
     mixChartInstance.options.scales.y.title.text = unitLabel;
     mixChartInstance.update('none');
@@ -1102,6 +1198,7 @@ function drawMix(data, hoverEnabled, showMw, splitByType) {
         tooltip: {
           enabled: hoverEnabled,
           callbacks: {
+            title: (items) => (items?.length ? labels[items[0].dataIndex] : ''),
             label: (item) => `${item.dataset.label}: ${item.raw.toFixed(1)} ${unitLabel}`,
           },
         },
@@ -1109,7 +1206,18 @@ function drawMix(data, hoverEnabled, showMw, splitByType) {
       scales: {
         x: {
           grid: { display: false },
-          ticks: { maxRotation: 0 },
+          ticks: useSeasonal
+            ? {
+              maxRotation: 0,
+              minRotation: 0,
+              autoSkip: false,
+              callback: (value, index) => (index % SEASON_MONTHS.length === 0 ? String(BASE_YEAR + Math.floor(index / SEASON_MONTHS.length)) : ''),
+            }
+            : {
+              maxRotation: 0,
+              minRotation: 0,
+              autoSkip: true,
+            },
         },
         y: {
           stacked: true,
@@ -1126,10 +1234,12 @@ function drawMix(data, hoverEnabled, showMw, splitByType) {
  * Builds or updates the monthly 2035 seasonality chart (average MW by month).
  * Uses the same fill/hatch style logic as the other stacked charts.
  */
-function drawSeasonality(twh35, loadTwh2035, hoverEnabled, splitByType) {
+function drawSeasonality(twh35, loadTwh2035, hoverEnabled, splitByType, marginGoalPct = 15) {
   const toAvgMw = (twh) => (twh * MWH_PER_TWH) / HOURS_PER_YEAR;
+  const marginGoal = Number.isFinite(marginGoalPct) ? marginGoalPct : 0;
   const loadAvgMw = toAvgMw(loadTwh2035);
   const usageMonthly = LOAD_SEASONAL_PROFILE.map((f) => loadAvgMw * f);
+  const targetMonthly = usageMonthly.map((v) => v * (1 + marginGoal / 100));
   const monthCount = SEASON_MONTHS.length;
   const isSplitByType = typeof splitByType === 'boolean' ? splitByType : document.getElementById('rel_stack_by_type').checked;
   const gapDeficitColors = getGapDeficitColors();
@@ -1239,11 +1349,28 @@ function drawSeasonality(twh35, loadTwh2035, hoverEnabled, splitByType) {
     order: -100,
     pointStyle: 'line',
   });
+  datasets.push({
+    label: `Target Supply (${Math.round(marginGoal)}% Margin)`,
+    data: targetMonthly,
+    backgroundColor: 'transparent',
+    borderColor: '#6b7280',
+    borderWidth: 1,
+    borderDash: [6, 4],
+    fill: false,
+    tension: REL_PLOT_TENSION,
+    cubicInterpolationMode: 'monotone',
+    pointRadius: 0,
+    hoverPointRadius: 0,
+    pointHitRadius: 12,
+    stack: 'targetOverlay',
+    order: -90,
+    pointStyle: 'line',
+  });
 
   const monthlyStack = Array.from({ length: monthCount }, (_, i) => entries.reduce((sum, entry) => sum + (entry.series[i] ?? 0), 0));
-  const yMaxRaw = Math.max(...usageMonthly, ...monthlyStack);
+  const yMaxRaw = Math.max(...usageMonthly, ...targetMonthly, ...monthlyStack);
   const yMax = Math.max(100, Math.ceil((yMaxRaw * 1.12) / 100) * 100);
-  const expectedDatasets = entries.length + 1;
+  const expectedDatasets = entries.length + 2;
   if (seasonChartInstance && seasonChartInstance.data.datasets.length !== expectedDatasets) {
     seasonChartInstance.destroy();
     seasonChartInstance = null;
@@ -1538,9 +1665,12 @@ const DEFAULT_INPUTS = {
   p_line_sep: DEFAULT_LINE_SEPARATION,
   p_hatch_width: DEFAULT_HATCH_WIDTH,
   p_hatch_strength: DEFAULT_HATCH_STRENGTH,
+  p_panel_rounding: DEFAULT_PANEL_ROUNDING,
+  p_panel_shadow: DEFAULT_PANEL_SHADOW,
   p_margin_goal: 15,
   p_graph_hover: true,
   mix_units_mw: false,
+  mix_include_seasonal: false,
 };
 
 /** Draw default-position marker ticks on slider tracks. */

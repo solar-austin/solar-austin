@@ -5,6 +5,10 @@
   --risk: #d32f2f;
   --safe: #2e7d32;
   --font: ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --panel-radius: 8px;
+  --panel-shadow-y: 1px;
+  --panel-shadow-blur: 3px;
+  --panel-shadow-alpha: 0.1;
 }
 
 * { box-sizing: border-box; }
@@ -77,9 +81,9 @@ h1 {
 
 .card {
   background: var(--panel);
-  border-radius: 8px;
+  border-radius: var(--panel-radius);
   padding: 15px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 var(--panel-shadow-y) var(--panel-shadow-blur) rgba(0, 0, 0, var(--panel-shadow-alpha));
   margin-bottom: 15px;
   border: 1px solid #e0e0e0;
 }
@@ -155,6 +159,37 @@ button.has-tooltip:hover {
 
 .input-section:first-of-type {
   margin-top: 0;
+}
+
+.ui-options-panel {
+  margin: 14px 0 8px 0;
+}
+
+.ui-options-panel > summary {
+  list-style: none;
+  cursor: pointer;
+  margin: 0 0 8px 0;
+}
+
+.ui-options-panel > summary::-webkit-details-marker {
+  display: none;
+}
+
+.ui-options-panel > summary::marker {
+  content: '';
+}
+
+.ui-options-panel > summary::before {
+  content: '\25B6';
+  display: inline-block;
+  margin-right: 6px;
+  font-size: 10px;
+  color: #777;
+  transform: translateY(-1px);
+}
+
+.ui-options-panel[open] > summary::before {
+  content: '\25BC';
 }
 
 .inputs-card {
@@ -321,9 +356,10 @@ input[type="range"] {
 .kpi {
   background: #fff;
   padding: 15px;
-  border-radius: 8px;
+  border-radius: var(--panel-radius);
   text-align: center;
   border: 1px solid #ccc;
+  box-shadow: 0 var(--panel-shadow-y) var(--panel-shadow-blur) rgba(0, 0, 0, var(--panel-shadow-alpha));
 }
 
 .kpi-val {
@@ -389,6 +425,11 @@ input[type="range"] {
 
 .chart-box {
   height: 280px;
+  border-radius: calc(var(--panel-radius) );
+}
+
+#mixChart {
+  border-radius: calc(var(--panel-radius) );
 }
 
 .chart-box-sm {
