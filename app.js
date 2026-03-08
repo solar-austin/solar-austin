@@ -23,7 +23,7 @@ const MWH_PER_TWH = 1e6;
 const DOLLARS_PER_MILLION = 1e6;
 const HOURS_PER_YEAR = 8760;
 const DIST_SOLAR_BASELINE_MW = 188;
-const DEFAULT_GRAPH_SHADE = 25;
+const DEFAULT_GRAPH_SHADE = 10;
 const DEFAULT_LINE_SEPARATION = 5;
 const DEFAULT_HATCH_WIDTH = 1;
 const DEFAULT_HATCH_STRENGTH = 50;
@@ -47,7 +47,7 @@ function hexToRgb(hex) {
 }
 
 const SHADE_OFFSETS = { borderToBlack: 0.28 };
-const FAMILY_BASE_COLORS = { wind: '#4FC3F7', solar: '#DDAA1F', distributed: '#C9852F', geo: '#9A6346', combined: '#43A047' };
+const FAMILY_BASE_COLORS = { wind: '#4FC3F7', solar: '#E09328', distributed: '#C9852F', geo: '#9A6346', combined: '#43A047' };
 const SPLIT_COLOR_FAMILIES = { exWind: 'wind', newWind: 'wind', exSolar: 'solar', newSolar: 'solar', distSolar: 'distributed', geo: 'geo' };
 
 function getShadedFillColor(hex) {
@@ -117,8 +117,8 @@ const STYLES = {
   dr: { c: '#14b8a6', l: 'Demand Response' },
   exWind: { c: '#B3E5FC', l: 'Exist. Wind' },   // light blue
   newWind: { c: '#4FC3F7', l: 'New Wind' },     // dark blue (same hue)
-  exSolar: { c: '#F2D778', l: 'Exist. Utility Solar' }, // light golden yellow (same hue as New Solar)
-  newSolar: { c: '#DDAA1F', l: 'New Utility Solar' },   // warm yellow-gold (same hue)
+  exSolar: { c: '#FFDDA0', l: 'Exist. Utility Solar' }, // light orange (same hue as New Solar)
+  newSolar: { c: '#E09328', l: 'New Utility Solar' },   // strong orange (same hue)
   distSolar: { c: '#C9852F', l: 'Distributed Solar' },
   geo: { c: '#9A6346', l: 'New Geo' },
   gap: { c: '#E57373', l: 'Deficit' },
@@ -849,15 +849,14 @@ function getHatchStripeTone(hexColor, colorKey = '') {
   const b = n & 255;
   const isGeothermal = colorKey === 'geo';
   const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-  // Light fills (like light solar) need darker hatch lines for legibility.
-  const useDarkStripes = luminance > 175;
-  const baseTint = isGeothermal ? 0.22 : (useDarkStripes ? 0.42 : 0.35);
+  // Keep hatch lines lighter than fill; for very light fills, push further toward white for visibility.
+  const baseTint = isGeothermal ? 0.22 : (luminance > 175 ? 0.58 : 0.35);
   const strengthScale = getHatchStrengthScale();
   // Pivot at 50% so higher strength always increases contrast/visibility.
   const tintAdjusted = Math.max(0.04, Math.min(0.82, baseTint + (strengthScale - 0.5) * 0.35));
-  const targetR = useDarkStripes ? 34 : 255;
-  const targetG = useDarkStripes ? (isGeothermal ? 34 : 36) : (isGeothermal ? 232 : 255);
-  const targetB = useDarkStripes ? (isGeothermal ? 28 : 38) : (isGeothermal ? 212 : 255);
+  const targetR = 255;
+  const targetG = isGeothermal ? 232 : 255;
+  const targetB = isGeothermal ? 212 : 255;
   return {
     r,
     g,
