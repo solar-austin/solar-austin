@@ -128,6 +128,7 @@ const STYLES = {
 
 /** Stack order when split-by-resource is enabled on charts. */
 const MIX_SPLIT_KEYS = ['nuke', 'gasBase', 'gasPeak', 'coal', 'geo', 'exWind', 'newWind', 'exSolar', 'newSolar', 'distSolar', 'gap'];
+const MIX_SPLIT_KEYS_NEW_ON_TOP = ['nuke', 'gasBase', 'gasPeak', 'coal', 'exWind', 'exSolar', 'geo', 'newWind', 'newSolar', 'distSolar', 'gap'];
 
 /** Top-chart grouping when split-by-resource is disabled. */
 const MIX_COMBINED_KEYS = ['existingPower', 'newGeneration', 'gap'];
@@ -380,6 +381,7 @@ function update() {
   const mixIncludeSeasonal = document.getElementById('mix_include_seasonal')?.checked ?? false;
   const showRiskHourBands = document.getElementById('p_show_risk_hours')?.checked ?? true;
   const splitByType = document.getElementById('rel_stack_by_type').checked;
+  const showNewPowerTogether = document.getElementById('show_new_power_together')?.checked ?? false;
   const graphShade = +document.getElementById('p_graph_shade').value;
   const lineSep = +document.getElementById('p_line_sep').value;
   const hatchWidth = +document.getElementById('p_hatch_width').value;
@@ -387,6 +389,13 @@ function update() {
   const deficitWidth = +document.getElementById('p_deficit_width').value;
   const panelRounding = +document.getElementById('p_panel_rounding').value;
   const panelShadow = +document.getElementById('p_panel_shadow').value;
+  const queueMarkerRefresh = () => {
+    refreshSliderDefaultMarkers();
+    if (typeof window.requestAnimationFrame === 'function') {
+      window.requestAnimationFrame(refreshSliderDefaultMarkers);
+    }
+  };
+  document.querySelectorAll('input[type="range"]').forEach(updateRangeFill);
 
   const buildPlan = getBuildPlanFromTargets(windTargetMw, solarTargetMw, distSolarTargetMw, YEARS - 1);
   const geoAnnualMw = getAnnualBuildFromTarget(geoTargetMw, YEARS - 1);
@@ -499,14 +508,14 @@ function update() {
   const total2035 = data.load[lastIdx];
 
   setMixUnitsLabel(mixShowMw);
-  drawMix(data, graphHoverEnabled, mixShowMw, splitByType, mixIncludeSeasonal, marginGoalPct);
+  drawMix(data, graphHoverEnabled, mixShowMw, splitByType, mixIncludeSeasonal, marginGoalPct, showNewPowerTogether);
   const rel = runReliability(...getReliabilityArgs(nukeMW, windTargetMw, solarTargetMw, distSolarTargetMw, geoTargetMw, batt, distBatt, gasBase, gasPeak, coal, ee, dr, growth, marginGoalPct));
   const peakerUsageTwh35 = getAnnualizedPeakerTwhFromReliability(rel);
   // Carbon Free Calculation (Excludes Gas and Deficit). Peaker is usage-based from reliability dispatch.
   const carbonSources = data.gasBase[lastIdx] + peakerUsageTwh35 + data.coal[lastIdx] + data.gap[lastIdx];
   const carbonFreePct = total2035 > 0 ? Math.max(0, ((total2035 - carbonSources) / total2035) * 100) : 0;
   document.getElementById('k_clean').textContent = carbonFreePct.toFixed(0) + '%';
-  drawRel(rel, graphHoverEnabled, splitByType, marginGoalPct, showRiskHourBands);
+  drawRel(rel, graphHoverEnabled, splitByType, marginGoalPct, showRiskHourBands, showNewPowerTogether);
 
   // Supply margin: minimum hourly (supply - load) / load as %, from reliability run
   let marginPct = 0;
@@ -540,10 +549,11 @@ function update() {
     distSolar: data.distSolar[lastIdx],
     gap: data.gap[lastIdx],
   };
-  drawSeasonality(twh35, total2035, graphHoverEnabled, splitByType, marginGoalPct);
+  drawSeasonality(twh35, total2035, graphHoverEnabled, splitByType, marginGoalPct, showNewPowerTogether);
   const totCostM = runFinancials(twh35, tx, total2035, batt, distBatt);
   const rateCents = total2035 > 0 ? (totCostM / total2035 / 10) : 0;
   document.getElementById('k_rate').textContent = rateCents.toFixed(1) + '¢';
+  queueMarkerRefresh();
 }
 
 /**
@@ -1108,7 +1118,8 @@ function drawMix(data, hoverEnabled, showMw, splitByType, includeSeasonalTop = f
     return series;
   };
 
-  const splitEntries = MIX_SPLIT_KEYS.map((key) => ({
+  const showNewPowerTogether = document.getElementById('show_new_power_together')?.checked ?? false;
+  const splitEntries = getMixSplitKeys(showNewPowerTogether).map((key) => ({
     key,
     label: STYLES[key].l,
     fillColor: getSplitSeriesColors(key).fill,
@@ -1340,7 +1351,8 @@ function drawSeasonality(twh35, loadTwh2035, hoverEnabled, splitByType, marginGo
     return Math.max(0, usageMonthly[i] - supplyNoGap);
   });
 
-  const splitEntries = MIX_SPLIT_KEYS.map((key) => ({
+  const showNewPowerTogether = document.getElementById('show_new_power_together')?.checked ?? false;
+  const splitEntries = getMixSplitKeys(showNewPowerTogether).map((key) => ({
     key,
     label: STYLES[key].l,
     fillColor: getSplitSeriesColors(key).fill,
@@ -1513,6 +1525,26 @@ const REL_STACK_ORDER = [
   { simKey: 'distSolar', styleKey: 'distSolar' },
   { simKey: 'peaker', styleKey: 'gasPeak' },
 ];
+const REL_STACK_ORDER_NEW_ON_TOP = [
+  { simKey: 'nuke', styleKey: 'nuke' },
+  { simKey: 'coal', styleKey: 'coal' },
+  { simKey: 'gasBase', styleKey: 'gasBase' },
+  { simKey: 'exWind', styleKey: 'exWind' },
+  { simKey: 'exSolar', styleKey: 'exSolar' },
+  { simKey: 'peaker', styleKey: 'gasPeak' },
+  { simKey: 'geo', styleKey: 'geo' },
+  { simKey: 'newWind', styleKey: 'newWind' },
+  { simKey: 'newSolar', styleKey: 'newSolar' },
+  { simKey: 'distSolar', styleKey: 'distSolar' },
+];
+
+function getMixSplitKeys(showNewPowerTogether = false) {
+  return showNewPowerTogether ? MIX_SPLIT_KEYS_NEW_ON_TOP : MIX_SPLIT_KEYS;
+}
+
+function getRelStackOrder(showNewPowerTogether = false) {
+  return showNewPowerTogether ? REL_STACK_ORDER_NEW_ON_TOP : REL_STACK_ORDER;
+}
 
 /**
  * Builds or updates the 24-hour reliability chart.
@@ -1535,7 +1567,9 @@ function drawRel(rel, hoverEnabled, splitByType, marginGoalPct, showRiskHourBand
   const powerGroupStyles = getPowerGroupStyles();
   const stackByType = typeof splitByType === 'boolean' ? splitByType : document.getElementById('rel_stack_by_type').checked;
   const ctx = relChartInstance ? relChartInstance.ctx : document.getElementById('relChart').getContext('2d');
-  const expectedDatasets = stackByType ? REL_STACK_ORDER.length + 5 : 7;
+  const showNewPowerTogether = document.getElementById('show_new_power_together')?.checked ?? false;
+  const relStackOrder = getRelStackOrder(showNewPowerTogether);
+  const expectedDatasets = stackByType ? relStackOrder.length + 5 : 7;
   if (relChartInstance && relChartInstance.data.datasets.length !== expectedDatasets) {
     relChartInstance.destroy();
     relChartInstance = null;
@@ -1616,7 +1650,7 @@ function drawRel(rel, hoverEnabled, splitByType, marginGoalPct, showRiskHourBand
   const datasets = stackByType
     ? [
       deficitDataset,
-      ...REL_STACK_ORDER.map(({ simKey, styleKey }) => {
+      ...relStackOrder.map(({ simKey, styleKey }) => {
         const isNew = NEW_GENERATION_KEYS.includes(styleKey);
         const splitColors = getSplitSeriesColors(styleKey);
         const oldNewBoundaryColor = getOldNewBoundaryColor(styleKey);
@@ -1772,6 +1806,7 @@ const DEFAULT_INPUTS = {
   p_show_risk_hours: true,
   mix_units_mw: false,
   mix_include_seasonal: false,
+  show_new_power_together: false,
 };
 
 /** Draw default-position marker ticks on slider tracks. */
@@ -1787,7 +1822,60 @@ function initSliderDefaultMarkers() {
     const clampedRatio = Math.max(0, Math.min(1, ratio));
     wrap.classList.add('with-default-marker');
     wrap.style.setProperty('--default-ratio', clampedRatio.toString());
+    if (!wrap.querySelector('.slider-default-marker')) {
+      const marker = document.createElement('span');
+      marker.className = 'slider-default-marker';
+      marker.setAttribute('aria-hidden', 'true');
+      wrap.appendChild(marker);
+    }
+    positionSliderDefaultMarker(input, clampedRatio);
   });
+}
+
+function getSliderThumbWidth(wrap) {
+  const fallbackWidth = Number.parseFloat(getComputedStyle(wrap).getPropertyValue('--slider-thumb-size'));
+  return Number.isFinite(fallbackWidth) && fallbackWidth > 0 ? fallbackWidth : 0;
+}
+
+function getSliderMarkerNudge(wrap) {
+  const nudge = Number.parseFloat(getComputedStyle(wrap).getPropertyValue('--slider-marker-nudge'));
+  return Number.isFinite(nudge) ? nudge : 0;
+}
+
+function positionSliderDefaultMarker(input, ratioOverride) {
+  const wrap = input?.closest('.slider-wrap');
+  if (!wrap) return;
+  const marker = wrap.querySelector('.slider-default-marker');
+  if (!marker) return;
+
+  const min = Number(input.min ?? 0);
+  const max = Number(input.max ?? 100);
+  const defaultVal = Number(input.dataset.default);
+  if (!Number.isFinite(min) || !Number.isFinite(max) || !Number.isFinite(defaultVal) || max <= min) return;
+
+  const rawRatio = ratioOverride ?? ((defaultVal - min) / (max - min));
+  const ratio = Math.max(0, Math.min(1, rawRatio));
+  const thumbWidth = getSliderThumbWidth(wrap);
+  const markerNudge = getSliderMarkerNudge(wrap);
+  const usableWidth = Math.max(0, input.clientWidth - thumbWidth);
+  const markerLeft = (usableWidth * ratio) + (thumbWidth / 2) + markerNudge;
+  marker.style.left = `${markerLeft}px`;
+}
+
+function refreshSliderDefaultMarkers() {
+  document.querySelectorAll('input[type="range"][data-default]').forEach((input) => {
+    positionSliderDefaultMarker(input);
+  });
+}
+
+function updateRangeFill(input) {
+  if (!input || input.type !== 'range') return;
+  const min = Number(input.min ?? 0);
+  const max = Number(input.max ?? 100);
+  const value = Number(input.value);
+  if (!Number.isFinite(min) || !Number.isFinite(max) || !Number.isFinite(value) || max <= min) return;
+  const ratio = Math.max(0, Math.min(1, (value - min) / (max - min)));
+  input.style.setProperty('--range-fill-ratio', `${(ratio * 100).toFixed(4)}%`);
 }
 
 /** Snap range sliders to their default value when close. */
@@ -1918,11 +2006,15 @@ function autoSolve() {
 document.querySelectorAll('input').forEach((input) => {
   input.oninput = () => {
     maybeSnapToDefault(input);
+    updateRangeFill(input);
     update();
   };
 });
 window.addEventListener('load', () => {
   initSliderDefaultMarkers();
+  document.querySelectorAll('input[type="range"]').forEach(updateRangeFill);
   update();
 });
+
+window.addEventListener('resize', refreshSliderDefaultMarkers);
 

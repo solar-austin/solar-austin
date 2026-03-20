@@ -232,6 +232,10 @@
         <input type="checkbox" id="rel_stack_by_type" checked onchange="update()">
         <span class="has-tooltip" title="Applies to all charts. Checked: split by resource type. Unchecked: combine into Existing Power and New Generation.">Split by resource type</span>
       </label>
+      <label class="left-toggle">
+        <input type="checkbox" id="show_new_power_together" onchange="update()">
+        <span class="has-tooltip" title="Split-by-resource mode only: keep all new generation grouped at the top of the stack across all charts.">Show new power together</span>
+      </label>
       <button class="btn-reset" onclick="resetInputs()">Reset</button>
       <button class="btn-solve has-tooltip" onclick="autoSolve()" title="Scale New Wind, New Utility Solar, Geothermal, and Battery until the minimum supply margin reaches 15%. Works for any load growth.">Auto-Solve Reliability Gap</button>
     </div>
