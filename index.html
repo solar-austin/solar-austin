@@ -118,6 +118,14 @@
       </div>
       <div class="row">
         <div class="row-head">
+          <span class="swatch" style="background: #F3B6D9"></span>
+          <span class="lbl has-tooltip" title="4-hour distributed battery capacity (MW nameplate). Uses the same reliability logic as firm battery but is tracked separately in the chart and cost table.">Distributed Battery</span>
+        </div>
+        <div class="slider-wrap"><input type="range" id="p_dist_batt" min="0" max="2500" value="0" data-default="0"></div>
+        <span class="val" id="v_dist_batt">0</span>
+      </div>
+      <div class="row">
+        <div class="row-head">
           <span class="swatch" style="background: #2dd4bf"></span>
           <span class="lbl has-tooltip" title="Programs that reduce total electricity use (e.g. efficient lighting, HVAC). Modeled as a flat reduction in load (MW) every hour and in annual TWh.">Energy Efficiency</span>
         </div>
@@ -224,10 +232,6 @@
         <input type="checkbox" id="rel_stack_by_type" checked onchange="update()">
         <span class="has-tooltip" title="Applies to all charts. Checked: split by resource type. Unchecked: combine into Existing Power and New Generation.">Split by resource type</span>
       </label>
-      <label class="left-toggle">
-        <input type="checkbox" id="mix_include_seasonal" onchange="update()">
-        <span class="has-tooltip" title="Top chart only: apply monthly seasonal trends to TWh mode across the full timeline. Nameplate MW mode always stays annual (no seasonal effect).">Include seasonal trends in top chart</span>
-      </label>
       <button class="btn-reset" onclick="resetInputs()">Reset</button>
       <button class="btn-solve has-tooltip" onclick="autoSolve()" title="Scale New Wind, New Utility Solar, Geothermal, and Battery until the minimum supply margin reaches 15%. Works for any load growth.">Auto-Solve Reliability Gap</button>
     </div>
@@ -236,24 +240,36 @@
       <div class="card">
         <div class="chart-head">
           <h3 class="has-tooltip" title="Stacked area chart: supply by resource (nuclear, gas, coal, wind, solar, geo, EE, gap) and total load (Usage line) over the planning horizon. Gap = shortfall met by market purchases.">10 year outlook - resource mix (<span id="mix_units_lbl">TWh</span>)</h3>
-          <label class="rel-chart-toggle">
-            <input type="checkbox" id="mix_units_mw" onchange="update()">
-            <span class="has-tooltip" title="Switch top-chart units. TWh = annual energy. Nameplate MW = resource nameplate/effective MW by year; market gap is hidden in this mode.">Show Nameplate MW</span>
-          </label>
+          <div class="chart-head-toggles">
+            <label class="rel-chart-toggle">
+              <input type="checkbox" id="mix_units_mw" onchange="update()">
+              <span class="has-tooltip" title="Switch top-chart units. TWh = annual energy. Nameplate MW = resource nameplate/effective MW by year; market gap is hidden in this mode.">Show Nameplate MW</span>
+            </label>
+            <label class="rel-chart-toggle">
+              <input type="checkbox" id="mix_include_seasonal" onchange="update()">
+              <span class="has-tooltip" title="Top chart only: apply monthly seasonal trends to TWh mode across the full timeline. Nameplate MW mode always stays annual (no seasonal effect).">Include seasonal trends</span>
+            </label>
+          </div>
         </div>
         <div class="chart-box"><canvas id="mixChart"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="chart-head">
+          <h3 class="has-tooltip" title="Simulated August peak day: 24-hour supply vs load (MW). Shows whether the system meets load with the margin goal; deficit (red) and risk hours indicate shortfalls.">2035 Peak reliability (24-Hour Stress Test)</h3>
+          <div class="chart-head-toggles">
+            <label class="rel-chart-toggle">
+              <input type="checkbox" id="p_show_risk_hours" checked onchange="update()">
+              <span class="has-tooltip" title="Reliability chart only: highlight each risk hour with a light red background band and subtle red edge lines.">Show risk hour bands</span>
+            </label>
+          </div>
+        </div>
+        <div class="chart-box-sm"><canvas id="relChart"></canvas></div>
       </div>
       <div class="card">
         <div class="chart-head">
           <h3 class="has-tooltip" title="2035 monthly seasonality (monthly average MW), using the same resource stacks and styling as the other charts. Load follows an Austin best-guess seasonal profile; solar and wind use best-guess seasonal generation profiles; annual totals stay anchored to your scenario.">2035 full year (Monthly Avg MW)</h3>
         </div>
         <div class="chart-box-mid"><canvas id="seasonChart"></canvas></div>
-      </div>
-      <div class="card">
-        <div class="chart-head">
-          <h3 class="has-tooltip" title="Simulated August peak day: 24-hour supply vs load (MW). Shows whether the system meets load with the margin goal; deficit (red) and risk hours indicate shortfalls.">2035 Peak reliability (24-Hour Stress Test)</h3>
-        </div>
-        <div class="chart-box-sm"><canvas id="relChart"></canvas></div>
       </div>
     </div>
   </div>
@@ -290,5 +306,3 @@
 <script src="app.js"></script>
 </body>
 </html>
-
-

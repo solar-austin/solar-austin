@@ -126,6 +126,14 @@ h1 {
   white-space: nowrap;
 }
 
+.chart-head-toggles {
+  display: inline-flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
 .rel-chart-toggle input {
   cursor: pointer;
 }
@@ -262,20 +270,21 @@ button.has-tooltip:hover {
   position: absolute;
   left: calc((100% - var(--slider-thumb-size)) * var(--default-ratio, 0.5) + (var(--slider-thumb-size) / 2));
   top: 50%;
-  width: 3px;
-  height: 20px;
+  width: 4px;
+  height: 24px;
   border-radius: 999px;
   background: linear-gradient(
     180deg,
-    rgba(40, 40, 40, 0.08) 0%,
-    rgba(40, 40, 40, 0.34) 25%,
-    rgba(40, 40, 40, 0.34) 75%,
-    rgba(40, 40, 40, 0.08) 100%
+    rgba(40, 40, 40, 0.16) 0%,
+    rgba(40, 40, 40, 0.55) 25%,
+    rgba(40, 40, 40, 0.55) 75%,
+    rgba(40, 40, 40, 0.16) 100%
   );
   box-shadow:
-    0 1px 6px rgba(0, 0, 0, 0.12),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.22);
-  opacity: 0.7;
+    0 1px 6px rgba(0, 0, 0, 0.18),
+    0 0 0 1px rgba(255, 255, 255, 0.3),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.28);
+  opacity: 0.95;
   transform: translate(-50%, -50%);
   pointer-events: none;
   z-index: 1;

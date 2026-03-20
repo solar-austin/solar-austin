@@ -15,8 +15,8 @@ const BASE_YEAR = 2025;
  */
 const CF = { wind: 0.35, solar: 0.25, distSolar: 0.2, geo: 0.9, gasBase: 0.5, gasPeak: 0.08, coal: 0.6, nuke: 0.9 };
 
-/** Wholesale or proxy energy prices ($/MWh) for energy rows; batt is $k/MW-year for capacity. */
-const PRICES = { nuke: 35, gasBase: 55, gasPeak: 95, coal: 45, ee: 25, dr: 25, exWind: 28, exSolar: 24, newWind: 48, newSolar: 36, distSolar: 40, geo: 85, gap: 120, batt: 120 };
+/** Wholesale or proxy energy prices ($/MWh) for energy rows; battery prices are $k/MW-year for capacity. */
+const PRICES = { nuke: 35, gasBase: 55, gasPeak: 95, coal: 45, ee: 25, dr: 25, exWind: 28, exSolar: 24, newWind: 48, newSolar: 36, distSolar: 40, geo: 85, gap: 120, batt: 120, distBatt: 120 };
 
 // Cost units: vol (TWh) × price ($/MWh) → 1 TWh = 1e6 MWh, so cost ($) = vol × 1e6 × price, cost ($M) = vol × price.
 const MWH_PER_TWH = 1e6;
@@ -122,7 +122,8 @@ const STYLES = {
   distSolar: { c: '#C9852F', l: 'Distributed Solar' },
   geo: { c: '#9A6346', l: 'New Geo' },
   gap: { c: '#E57373', l: 'Deficit' },
-  batt: { c: '#CE93D8', l: 'Battery' },
+  batt: { c: '#CE93D8', l: 'Firm Battery' },
+  distBatt: { c: '#F3B6D9', l: 'Distributed Battery' },
 };
 
 /** Stack order when split-by-resource is enabled on charts. */
@@ -329,7 +330,7 @@ const EXISTING_SOLAR_TWH = buildExistingSolarTwhByYear();
 const BUILD_YRS_TOTAL = 9;
 
 /** Build exact args for runReliability so chart and getMinMarginPct use identical inputs. */
-function getReliabilityArgs(nukeMW, windTargetMw, solarTargetMw, distSolarTargetMw, geoTargetMw, batt, gasBase, gasPeak, coal, ee, dr, growth, marginGoalPct) {
+function getReliabilityArgs(nukeMW, windTargetMw, solarTargetMw, distSolarTargetMw, geoTargetMw, batt, distBatt, gasBase, gasPeak, coal, ee, dr, growth, marginGoalPct) {
   const plan = getBuildPlanFromTargets(windTargetMw, solarTargetMw, distSolarTargetMw, YEARS - 1);
   const exSolarMW = (EXISTING_SOLAR_TWH[YEARS - 1] * 1e6) / (8760 * CF.solar);
   const exWindMW = (EXISTING_WIND_TWH[YEARS - 1] * 1e6) / (8760 * CF.wind);
@@ -349,6 +350,7 @@ function getReliabilityArgs(nukeMW, windTargetMw, solarTargetMw, distSolarTarget
     ee,
     dr,
     batt,
+    distBatt,
     growth,
     marginGoalPct,
   ];
@@ -372,9 +374,11 @@ function update() {
   const ee = +document.getElementById('p_ee').value;
   const dr = +document.getElementById('p_dr').value;
   const batt = +document.getElementById('p_batt').value;
+  const distBatt = +document.getElementById('p_dist_batt').value;
   const graphHoverEnabled = document.getElementById('p_graph_hover').checked;
   const mixShowMw = document.getElementById('mix_units_mw').checked;
   const mixIncludeSeasonal = document.getElementById('mix_include_seasonal')?.checked ?? false;
+  const showRiskHourBands = document.getElementById('p_show_risk_hours')?.checked ?? true;
   const splitByType = document.getElementById('rel_stack_by_type').checked;
   const graphShade = +document.getElementById('p_graph_shade').value;
   const lineSep = +document.getElementById('p_line_sep').value;
@@ -393,12 +397,11 @@ function update() {
   const geoMw2035 = geoTargetMw;
   const windMw2035 = buildPlan.newWindMw2035;
   const totalMw2035NoBattery = nukeMW + gasBase + gasPeak + coal + exWindMw2035 + exSolarMw2035 + windMw2035 + solarMw2035 + distSolarMw2035 + geoMw2035;
-  const annualBuildLabel = (mwPerYear) => `${mwPerYear >= 0 ? '+' : ''}${Math.round(mwPerYear)} MW/yr`;
-  const transitionYears = Math.max(1, YEARS - 1);
-  const nukeAnnualDelta = (nukeMW - DEFAULT_INPUTS.p_nuke) / transitionYears;
-  const gasBaseAnnualDelta = (gasBase - DEFAULT_INPUTS.p_gas_base) / transitionYears;
-  const gasPeakAnnualDelta = (gasPeak - DEFAULT_INPUTS.p_gas_peak) / transitionYears;
-  const coalAnnualDelta = (coal - DEFAULT_INPUTS.p_coal) / transitionYears;
+  const totalBuildLabel = (mwTotal) => `${mwTotal >= 0 ? '+' : ''}${Math.round(mwTotal)} MW`;
+  const nukeTotalDelta = nukeMW - DEFAULT_INPUTS.p_nuke;
+  const gasBaseTotalDelta = gasBase - DEFAULT_INPUTS.p_gas_base;
+  const gasPeakTotalDelta = gasPeak - DEFAULT_INPUTS.p_gas_peak;
+  const coalTotalDelta = coal - DEFAULT_INPUTS.p_coal;
 
   document.getElementById('v_tx').textContent = '$' + tx;
   document.getElementById('v_growth').textContent = growth + '%';
@@ -416,17 +419,18 @@ function update() {
   rootStyle.setProperty('--panel-shadow-y', `${((clampedShadow / 100) * 2).toFixed(2)}px`);
   rootStyle.setProperty('--panel-shadow-blur', `${((clampedShadow / 100) * 8).toFixed(2)}px`);
   rootStyle.setProperty('--panel-shadow-alpha', ((clampedShadow / 100) * 0.2).toFixed(3));
-  document.getElementById('v_nuke').innerHTML = `${nukeMW} MW<span class="val-total">${annualBuildLabel(nukeAnnualDelta)}</span>`;
-  document.getElementById('v_solar').innerHTML = `${solarTargetMw} MW<span class="val-total">${annualBuildLabel(buildPlan.solarAnnualMw)}</span>`;
-  document.getElementById('v_dist_solar').innerHTML = `${distSolarTargetMw} MW<span class="val-total">${annualBuildLabel(buildPlan.distSolarAnnualMw)}</span>`;
-  document.getElementById('v_wind').innerHTML = `${windTargetMw} MW<span class="val-total">${annualBuildLabel(buildPlan.windAnnualMw)}</span>`;
-  document.getElementById('v_geo').innerHTML = `${geoTargetMw} MW<span class="val-total">${annualBuildLabel(geoAnnualMw)}</span>`;
-  document.getElementById('v_gas_base').innerHTML = `${gasBase} MW<span class="val-total">${annualBuildLabel(gasBaseAnnualDelta)}</span>`;
-  document.getElementById('v_gas_peak').innerHTML = `${gasPeak} MW<span class="val-total">${annualBuildLabel(gasPeakAnnualDelta)}</span>`;
-  document.getElementById('v_coal').innerHTML = `${coal} MW<span class="val-total">${annualBuildLabel(coalAnnualDelta)}</span>`;
+  document.getElementById('v_nuke').innerHTML = `${nukeMW} MW<span class="val-total">${totalBuildLabel(nukeTotalDelta)}</span>`;
+  document.getElementById('v_solar').innerHTML = `${solarTargetMw} MW<span class="val-total">${totalBuildLabel(buildPlan.newSolarMw2035)}</span>`;
+  document.getElementById('v_dist_solar').innerHTML = `${distSolarTargetMw} MW<span class="val-total">${totalBuildLabel(buildPlan.newDistSolarMw2035)}</span>`;
+  document.getElementById('v_wind').innerHTML = `${windTargetMw} MW<span class="val-total">${totalBuildLabel(buildPlan.newWindMw2035)}</span>`;
+  document.getElementById('v_geo').innerHTML = `${geoTargetMw} MW<span class="val-total">${totalBuildLabel(geoTargetMw)}</span>`;
+  document.getElementById('v_gas_base').innerHTML = `${gasBase} MW<span class="val-total">${totalBuildLabel(gasBaseTotalDelta)}</span>`;
+  document.getElementById('v_gas_peak').innerHTML = `${gasPeak} MW<span class="val-total">${totalBuildLabel(gasPeakTotalDelta)}</span>`;
+  document.getElementById('v_coal').innerHTML = `${coal} MW<span class="val-total">${totalBuildLabel(coalTotalDelta)}</span>`;
   document.getElementById('v_ee').textContent = ee + ' MW';
   document.getElementById('v_dr').textContent = dr + ' MW';
   document.getElementById('v_batt').textContent = batt + ' MW';
+  document.getElementById('v_dist_batt').textContent = distBatt + ' MW';
   document.getElementById('v_total_mw_2035').textContent = Math.round(totalMw2035NoBattery) + ' MW';
 
   const data = { nuke: [], gasBase: [], gasPeak: [], coal: [], exWind: [], exSolar: [], geo: [], newWind: [], newSolar: [], distSolar: [], ee: [], dr: [], gap: [], load: [] };
@@ -496,13 +500,13 @@ function update() {
 
   setMixUnitsLabel(mixShowMw);
   drawMix(data, graphHoverEnabled, mixShowMw, splitByType, mixIncludeSeasonal, marginGoalPct);
-  const rel = runReliability(...getReliabilityArgs(nukeMW, windTargetMw, solarTargetMw, distSolarTargetMw, geoTargetMw, batt, gasBase, gasPeak, coal, ee, dr, growth, marginGoalPct));
+  const rel = runReliability(...getReliabilityArgs(nukeMW, windTargetMw, solarTargetMw, distSolarTargetMw, geoTargetMw, batt, distBatt, gasBase, gasPeak, coal, ee, dr, growth, marginGoalPct));
   const peakerUsageTwh35 = getAnnualizedPeakerTwhFromReliability(rel);
   // Carbon Free Calculation (Excludes Gas and Deficit). Peaker is usage-based from reliability dispatch.
   const carbonSources = data.gasBase[lastIdx] + peakerUsageTwh35 + data.coal[lastIdx] + data.gap[lastIdx];
   const carbonFreePct = total2035 > 0 ? Math.max(0, ((total2035 - carbonSources) / total2035) * 100) : 0;
   document.getElementById('k_clean').textContent = carbonFreePct.toFixed(0) + '%';
-  drawRel(rel, graphHoverEnabled, splitByType, marginGoalPct);
+  drawRel(rel, graphHoverEnabled, splitByType, marginGoalPct, showRiskHourBands);
 
   // Supply margin: minimum hourly (supply - load) / load as %, from reliability run
   let marginPct = 0;
@@ -537,7 +541,7 @@ function update() {
     gap: data.gap[lastIdx],
   };
   drawSeasonality(twh35, total2035, graphHoverEnabled, splitByType, marginGoalPct);
-  const totCostM = runFinancials(twh35, tx, total2035, batt);
+  const totCostM = runFinancials(twh35, tx, total2035, batt, distBatt);
   const rateCents = total2035 > 0 ? (totCostM / total2035 / 10) : 0;
   document.getElementById('k_rate').textContent = rateCents.toFixed(1) + '¢';
 }
@@ -546,7 +550,7 @@ function update() {
  * Populates the Landed Cost Financials table (2035 snapshot). Resources with vol below 0.05 TWh are omitted.
  * Remote resources get the TCOS adder applied. Battery row: capacity (MW), base $k/MW-year, total $M. Returns total cost in $M.
  */
-function runFinancials(twh, txAdder, loadTWh, battMW) {
+function runFinancials(twh, txAdder, loadTWh, battMW, distBattMW) {
   const isRemote = (k) => ['nuke', 'coal', 'exWind', 'exSolar', 'newWind', 'newSolar', 'gap'].includes(k);
   const rows = [
     { k: 'newWind', n: 'New Wind' },
@@ -591,18 +595,22 @@ function runFinancials(twh, txAdder, loadTWh, battMW) {
   });
 
   // Battery row: capacity (MW), base price $k/MW-year → cost $M = (batt × price_$k) / 1000
-  const batt = battMW ?? 0;
-  const battPrice = PRICES.batt ?? 120; // $k per MW per year
-  const battCostM = (batt * battPrice) / 1000;
-  tot += battCostM;
-  const battColor = STYLES.batt?.c ?? '#CE93D8';
-  html += `<tr>
-    <td style="border-left:4px solid ${battColor}">Battery</td>
-    <td>${batt} MW</td>
-    <td><input class="money-inp" type="number" value="${battPrice}" min="0" step="1" onchange="window.setPrice('batt', this.value)"></td>
-    <td style="color:#ccc">--</td>
-    <td>$${battCostM.toFixed(0)}</td>
-  </tr>`;
+  [
+    { key: 'batt', label: 'Firm Battery', mw: battMW ?? 0 },
+    { key: 'distBatt', label: 'Distributed Battery', mw: distBattMW ?? 0 },
+  ].forEach(({ key, label, mw }) => {
+    const battPrice = PRICES[key] ?? 120;
+    const battCostM = (mw * battPrice) / 1000;
+    tot += battCostM;
+    const battColor = STYLES[key]?.c ?? '#CE93D8';
+    html += `<tr>
+      <td style="border-left:4px solid ${battColor}">${label}</td>
+      <td>${mw} MW</td>
+      <td><input class="money-inp" type="number" value="${battPrice}" min="0" step="1" onchange="window.setPrice('${key}', this.value)"></td>
+      <td style="color:#ccc">--</td>
+      <td>$${battCostM.toFixed(0)}</td>
+    </tr>`;
+  });
 
   const finBody = document.getElementById('finBody');
   const tVol = document.getElementById('t_vol');
@@ -672,7 +680,7 @@ function getTwh2035(nukeMW, windTargetMw, solarTargetMw, distSolarTargetMw, geoT
  * Battery fills deficits first (charge from surplus hours, discharge to deficit hours); peaker only covers remaining shortfall after battery.
  * Two-pass battery in hourly steps with carry-over. Power limit = batt MW, energy capacity = 4h.
  */
-function runReliability(nukeMW, exSolarMW, exWindMW, newSolarMW, newDistSolarMW, newWindMW, geo, gasBase, gasPeak, coal, ee, dr, batt, growth, marginGoalPct) {
+function runReliability(nukeMW, exSolarMW, exWindMW, newSolarMW, newDistSolarMW, newWindMW, geo, gasBase, gasPeak, coal, ee, dr, batt, distBatt, growth, marginGoalPct) {
   const expandHourlyProfile = (hourlyProfile) => {
     const out = [];
     for (let h = 0; h < 24; h++) {
@@ -682,8 +690,11 @@ function runReliability(nukeMW, exSolarMW, exWindMW, newSolarMW, newDistSolarMW,
     }
     return out;
   };
+  const totalBatt = Math.max(0, batt + distBatt);
+  const firmBatteryShare = totalBatt > 0 ? Math.max(0, batt) / totalBatt : 0;
+  const distBatteryShare = totalBatt > 0 ? Math.max(0, distBatt) / totalBatt : 0;
   const peak = 3150 * Math.pow(1 + growth / 100, 10);
-  const E_cap = batt * 4; // MWh, 4-hour duration
+  const E_cap = totalBatt * 4; // MWh, 4-hour duration
   const eeFirm = ee * 0.7; // 70% of EE reduces load (MW) during stress
   const marginGoal = (marginGoalPct ?? 15) / 100;
   const sol = exSolarMW + newSolarMW + newDistSolarMW;
@@ -718,6 +729,8 @@ function runReliability(nukeMW, exSolarMW, exWindMW, newSolarMW, newDistSolarMW,
     newWind: new Array(REL_STEPS_PER_DAY),
     peaker: new Array(REL_STEPS_PER_DAY),
     discharge: new Array(REL_STEPS_PER_DAY),
+    dischargeFirm: new Array(REL_STEPS_PER_DAY),
+    dischargeDist: new Array(REL_STEPS_PER_DAY),
   };
   const chargeHeadroom = new Array(REL_STEPS_PER_DAY);
   const targetByStep = new Array(REL_STEPS_PER_DAY);
@@ -754,7 +767,7 @@ function runReliability(nukeMW, exSolarMW, exWindMW, newSolarMW, newDistSolarMW,
   const futureRequiredMWh = new Array(REL_STEPS_PER_DAY + 1).fill(0);
   const futureChargeMWh = new Array(REL_STEPS_PER_DAY + 1).fill(0);
   for (let s = REL_STEPS_PER_DAY - 1; s >= 0; s--) {
-    const stepChargeMwCap = Math.min(chargeHeadroom[s], batt);
+    const stepChargeMwCap = Math.min(chargeHeadroom[s], totalBatt);
     futureRequiredMWh[s] = futureRequiredMWh[s + 1] + requiredBattForTarget[s] * REL_DT_HOURS;
     futureChargeMWh[s] = futureChargeMWh[s + 1] + stepChargeMwCap * REL_DT_HOURS;
   }
@@ -766,18 +779,18 @@ function runReliability(nukeMW, exSolarMW, exWindMW, newSolarMW, newDistSolarMW,
   let riskHours = 0;
   for (let s = 0; s < REL_STEPS_PER_DAY; s++) {
     if (chargeHeadroom[s] > 0) {
-      const chargeMW = Math.min(chargeHeadroom[s], batt, (E_cap - soc) / REL_DT_HOURS);
+      const chargeMW = Math.min(chargeHeadroom[s], totalBatt, (E_cap - soc) / REL_DT_HOURS);
       soc += chargeMW * REL_DT_HOURS;
     }
     const supplyNoPeakerH = nukeMW + gasBase + coal + geo + sol * solarProfile[s] + win * windProfile[s];
     const targetH = targetByStep[s];
     const requiredNowMW = Math.max(0, targetH - supplyNoPeakerH - gasPeak);
-    const mandatoryDischargeMW = Math.min(requiredNowMW, batt, soc / REL_DT_HOURS);
+    const mandatoryDischargeMW = Math.min(requiredNowMW, totalBatt, soc / REL_DT_HOURS);
     soc -= mandatoryDischargeMW * REL_DT_HOURS;
 
     const shortfallAfterMandatory = Math.max(0, targetH - supplyNoPeakerH - mandatoryDischargeMW);
     const peakerNeededWithoutOptional = Math.min(gasPeak, shortfallAfterMandatory);
-    const battPowerHeadroom = Math.max(0, batt - mandatoryDischargeMW);
+    const battPowerHeadroom = Math.max(0, totalBatt - mandatoryDischargeMW);
     const reserveMWh = Math.max(0, futureRequiredMWh[s + 1] - futureChargeMWh[s + 1]);
     const optionalEnergyMWh = Math.max(0, soc - reserveMWh);
     const optionalDischargeMW = Math.min(peakerNeededWithoutOptional, battPowerHeadroom, optionalEnergyMWh / REL_DT_HOURS);
@@ -790,6 +803,8 @@ function runReliability(nukeMW, exSolarMW, exWindMW, newSolarMW, newDistSolarMW,
     sim.supplyNoBatt[s] = supplyNoPeakerH + peakerMW;
     sim.supply[s] = supplyNoPeakerH + peakerMW + dischargeMW;
     sim.discharge[s] = dischargeMW;
+    sim.dischargeFirm[s] = dischargeMW * firmBatteryShare;
+    sim.dischargeDist[s] = dischargeMW * distBatteryShare;
     if (sim.load[s] > sim.supply[s] + 10) riskHours += REL_DT_HOURS;
   }
   return { sim, risk: riskHours };
@@ -832,6 +847,49 @@ function stepToTimeOfDay(stepIndex) {
 /** Bright red for gap/deficit (top and bottom charts). */
 const GAP_DEFICIT_BASE = '#dc2626';
 const OLD_NEW_BOUNDARY_MAP = { exWind: 'newWind', exSolar: 'newSolar' };
+
+function getRiskHourMask(rel) {
+  const load = rel?.sim?.load ?? [];
+  const supply = rel?.sim?.supply ?? [];
+  return Array.from({ length: Math.max(load.length, supply.length) }, (_, i) => (load[i] ?? 0) > ((supply[i] ?? 0) + 10));
+}
+
+const relRiskHourBandsPlugin = {
+  id: 'relRiskHourBands',
+  beforeDatasetsDraw(chart, _args, pluginOptions) {
+    if (!pluginOptions?.enabled) return;
+    const indices = pluginOptions?.indices;
+    if (!Array.isArray(indices) || indices.length === 0) return;
+    const xScale = chart.scales?.x;
+    const chartArea = chart.chartArea;
+    if (!xScale || !chartArea) return;
+
+    const { ctx } = chart;
+    const stepCount = indices.length;
+    ctx.save();
+    ctx.lineWidth = 1;
+
+    for (let i = 0; i < stepCount; i++) {
+      const center = xScale.getPixelForValue(i);
+      const prevCenter = i > 0 ? xScale.getPixelForValue(i - 1) : null;
+      const nextCenter = i < stepCount - 1 ? xScale.getPixelForValue(i + 1) : null;
+      const left = prevCenter == null ? chartArea.left : (prevCenter + center) / 2;
+      const right = nextCenter == null ? chartArea.right : (center + nextCenter) / 2;
+      const isRiskHour = Boolean(indices[i]);
+      ctx.fillStyle = isRiskHour ? 'rgba(220, 38, 38, 0.08)' : 'rgba(34, 197, 94, 0.06)';
+      ctx.strokeStyle = isRiskHour ? 'rgba(185, 28, 28, 0.20)' : 'rgba(22, 163, 74, 0.16)';
+      ctx.fillRect(left, chartArea.top, Math.max(0, right - left), chartArea.bottom - chartArea.top);
+      ctx.beginPath();
+      ctx.moveTo(left, chartArea.top);
+      ctx.lineTo(left, chartArea.bottom);
+      ctx.moveTo(right, chartArea.top);
+      ctx.lineTo(right, chartArea.bottom);
+      ctx.stroke();
+    }
+
+    ctx.restore();
+  },
+};
 
 function getGapDeficitColors() {
   const fillHex = getShadedFillColor(GAP_DEFICIT_BASE);
@@ -1437,8 +1495,9 @@ function drawSeasonality(twh35, loadTwh2035, hoverEnabled, splitByType, marginGo
   });
 }
 
-/** Battery color in reliability chart (matches sidebar Firm Battery swatch). */
+/** Battery colors in reliability chart (match sidebar swatches). */
 const REL_BATT_COLOR = '#CE93D8';
+const REL_DIST_BATT_COLOR = '#F3B6D9';
 const REL_PLOT_TENSION = 0.22;
 
 /** Reliability chart stack order in split-by-resource mode. */
@@ -1460,30 +1519,47 @@ const REL_STACK_ORDER = [
  * Split mode: supply stacked by resource type (existing/new ordered together by type).
  * Combined mode: supply grouped into Existing Power + New Generation, plus battery/deficit/load overlays.
  *
- * @param {{ sim: { load, supply, supplyNoBatt, nuke, gasBase, coal, geo, exSolar, exWind, newSolar, distSolar, newWind, peaker, discharge }, risk: number }} rel - Result from runReliability().
+ * @param {{ sim: { load, supply, supplyNoBatt, nuke, gasBase, coal, geo, exSolar, exWind, newSolar, distSolar, newWind, peaker, discharge, dischargeFirm, dischargeDist }, risk: number }} rel - Result from runReliability().
  */
-function drawRel(rel, hoverEnabled, splitByType, marginGoalPct) {
+function drawRel(rel, hoverEnabled, splitByType, marginGoalPct, showRiskHourBands = true) {
   const stepCount = rel.sim.load?.length ?? REL_STEPS_PER_DAY;
   const labels = Array.from({ length: stepCount }, (_, i) => (i % REL_INTERVALS_PER_HOUR === 0 ? hourToTimeOfDay(i / REL_INTERVALS_PER_HOUR) : ''));
   const loadSeries = rel.sim.load ?? Array(stepCount).fill(0);
+  const riskHourMask = showRiskHourBands ? getRiskHourMask(rel) : [];
   const targetSupply = loadSeries.map((l) => l * (1 + (Number.isFinite(marginGoalPct) ? marginGoalPct : 0) / 100));
   const gapDeficitColors = getGapDeficitColors();
   const batteryFill = getShadedFillColor(REL_BATT_COLOR);
   const batteryBorder = getShadedBorderColor(REL_BATT_COLOR);
+  const distBatteryFill = getShadedFillColor(REL_DIST_BATT_COLOR);
+  const distBatteryBorder = getShadedBorderColor(REL_DIST_BATT_COLOR);
   const powerGroupStyles = getPowerGroupStyles();
   const stackByType = typeof splitByType === 'boolean' ? splitByType : document.getElementById('rel_stack_by_type').checked;
   const ctx = relChartInstance ? relChartInstance.ctx : document.getElementById('relChart').getContext('2d');
-  const expectedDatasets = stackByType ? REL_STACK_ORDER.length + 4 : 6;
+  const expectedDatasets = stackByType ? REL_STACK_ORDER.length + 5 : 7;
   if (relChartInstance && relChartInstance.data.datasets.length !== expectedDatasets) {
     relChartInstance.destroy();
     relChartInstance = null;
   }
 
   const batteryDataset = {
-    label: 'Battery',
-    data: rel.sim.discharge ?? Array(stepCount).fill(0),
+    label: 'Firm Battery',
+    data: rel.sim.dischargeFirm ?? Array(stepCount).fill(0),
     backgroundColor: hexToRgba(batteryFill, 1),
     borderColor: batteryBorder,
+    borderWidth: 0,
+    fill: true,
+    stack: 'area',
+    tension: REL_PLOT_TENSION,
+    cubicInterpolationMode: 'monotone',
+    pointRadius: 0,
+    pointStyle: 'rect',
+    order: 1,
+  };
+  const distBatteryDataset = {
+    label: 'Distributed Battery',
+    data: rel.sim.dischargeDist ?? Array(stepCount).fill(0),
+    backgroundColor: hexToRgba(distBatteryFill, 1),
+    borderColor: distBatteryBorder,
     borderWidth: 0,
     fill: true,
     stack: 'area',
@@ -1561,6 +1637,7 @@ function drawRel(rel, hoverEnabled, splitByType, marginGoalPct) {
         };
       }),
       batteryDataset,
+      distBatteryDataset,
       targetMarginDataset,
       loadDataset,
     ]
@@ -1610,6 +1687,7 @@ function drawRel(rel, hoverEnabled, splitByType, marginGoalPct) {
         },
         deficitDataset,
         batteryDataset,
+        distBatteryDataset,
         targetMarginDataset,
         loadDataset,
       ];
@@ -1619,16 +1697,19 @@ function drawRel(rel, hoverEnabled, splitByType, marginGoalPct) {
     relChartInstance.data.labels = labels;
     relChartInstance.data.datasets = datasets;
     relChartInstance.options.plugins.tooltip.enabled = hoverEnabled;
+    relChartInstance.options.plugins.relRiskHourBands = { enabled: showRiskHourBands, indices: riskHourMask };
     relChartInstance.update('none');
   } else {
     relChartInstance = new Chart(ctx, {
       type: 'line',
       data: { labels, datasets },
+      plugins: [relRiskHourBandsPlugin],
       options: {
         responsive: true,
         maintainAspectRatio: false,
         interaction: { mode: 'index', intersect: false },
         plugins: {
+          relRiskHourBands: { enabled: showRiskHourBands, indices: riskHourMask },
           legend: {
             position: 'bottom',
             labels: { usePointStyle: true },
@@ -1672,6 +1753,7 @@ const DEFAULT_INPUTS = {
   p_dist_solar: 188,
   p_geo: 0,
   p_batt: 500,
+  p_dist_batt: 0,
   p_gas_base: 300,
   p_gas_peak: 200,
   p_coal: 0,
@@ -1687,6 +1769,7 @@ const DEFAULT_INPUTS = {
   p_panel_shadow: DEFAULT_PANEL_SHADOW,
   p_margin_goal: 15,
   p_graph_hover: true,
+  p_show_risk_hours: true,
   mix_units_mw: false,
   mix_include_seasonal: false,
 };
@@ -1743,8 +1826,8 @@ function resetInputs() {
  * Returns the minimum supply margin % (worst hour) for the given inputs. Used by autoSolve to find a mix that hits the margin goal.
  * Uses same getReliabilityArgs → runReliability as the chart so battery and all logic are identical.
  */
-function getMinMarginPct(nukeMW, windTargetMw, solarTargetMw, distSolarTargetMw, geoTargetMw, batt, gasBase, gasPeak, coal, ee, dr, growth, marginGoalPct) {
-  const rel = runReliability(...getReliabilityArgs(nukeMW, windTargetMw, solarTargetMw, distSolarTargetMw, geoTargetMw, batt, gasBase, gasPeak, coal, ee, dr, growth, marginGoalPct));
+function getMinMarginPct(nukeMW, windTargetMw, solarTargetMw, distSolarTargetMw, geoTargetMw, batt, distBatt, gasBase, gasPeak, coal, ee, dr, growth, marginGoalPct) {
+  const rel = runReliability(...getReliabilityArgs(nukeMW, windTargetMw, solarTargetMw, distSolarTargetMw, geoTargetMw, batt, distBatt, gasBase, gasPeak, coal, ee, dr, growth, marginGoalPct));
   let marginPct = 0;
   for (let h = 0; h < rel.sim.load.length; h++) {
     const l = rel.sim.load[h];
@@ -1760,9 +1843,9 @@ function getMinMarginPct(nukeMW, windTargetMw, solarTargetMw, distSolarTargetMw,
  * Total cost ($M) for auto-solve: same formula as UI (runFinancials with gen + battery).
  * Energy: vol (TWh) × price ($/MWh) → $M. Battery: batt (MW) × price ($k/MW-yr) / 1000 → $M.
  */
-function totalCostForBuild(nukeMW, windTargetMw, solarTargetMw, distSolarTargetMw, geoTargetMw, batt, gasBase, gasPeak, coal, ee, dr, growth, tx, marginGoalPct) {
+function totalCostForBuild(nukeMW, windTargetMw, solarTargetMw, distSolarTargetMw, geoTargetMw, batt, distBatt, gasBase, gasPeak, coal, ee, dr, growth, tx, marginGoalPct) {
   const { twh35 } = getTwh2035(nukeMW, windTargetMw, solarTargetMw, distSolarTargetMw, geoTargetMw, gasBase, gasPeak, coal, ee, dr, growth);
-  const rel = runReliability(...getReliabilityArgs(nukeMW, windTargetMw, solarTargetMw, distSolarTargetMw, geoTargetMw, batt, gasBase, gasPeak, coal, ee, dr, growth, marginGoalPct));
+  const rel = runReliability(...getReliabilityArgs(nukeMW, windTargetMw, solarTargetMw, distSolarTargetMw, geoTargetMw, batt, distBatt, gasBase, gasPeak, coal, ee, dr, growth, marginGoalPct));
   const peakerUsageTwh35 = getAnnualizedPeakerTwhFromReliability(rel);
   const costTwh35 = { ...twh35, gasPeak: peakerUsageTwh35 };
   const remoteKeys = new Set(['nuke', 'coal', 'exWind', 'exSolar', 'newWind', 'newSolar', 'gap']);
@@ -1776,7 +1859,9 @@ function totalCostForBuild(nukeMW, windTargetMw, solarTargetMw, distSolarTargetM
 
   const battPrice = PRICES.batt ?? 120;
   const battCostM = (batt * battPrice) / 1000;
-  return genCostM + battCostM;
+  const distBattPrice = PRICES.distBatt ?? 120;
+  const distBattCostM = (distBatt * distBattPrice) / 1000;
+  return genCostM + battCostM + distBattCostM;
 }
 /**
  * Auto-solve: grid over (wind, solar, geo, battery); pick the feasible combo with lowest total cost.
@@ -1789,6 +1874,7 @@ function autoSolve() {
   const coal = +document.getElementById('p_coal').value;
   const ee = +document.getElementById('p_ee').value;
   const dr = +document.getElementById('p_dr').value;
+  const distBatt = +document.getElementById('p_dist_batt').value;
   const growth = +document.getElementById('p_growth').value;
   const tx = +document.getElementById('p_tx').value;
   const goal = +document.getElementById('p_margin_goal').value;
@@ -1810,10 +1896,10 @@ function autoSolve() {
     for (const solarTargetMw of SOLAR_TARGETS) {
       for (const geoTargetMw of GEO_TARGETS) {
         for (const batt of BATTERY_VALS) {
-          const minMarginPct = getMinMarginPct(nukeMW, windTargetMw, solarTargetMw, distSolarTargetMw, geoTargetMw, batt, gasBase, gasPeak, coal, ee, dr, growth, goal);
+          const minMarginPct = getMinMarginPct(nukeMW, windTargetMw, solarTargetMw, distSolarTargetMw, geoTargetMw, batt, distBatt, gasBase, gasPeak, coal, ee, dr, growth, goal);
           if (minMarginPct + 1e-9 < goal) continue;
 
-          const totalCostM = totalCostForBuild(nukeMW, windTargetMw, solarTargetMw, distSolarTargetMw, geoTargetMw, batt, gasBase, gasPeak, coal, ee, dr, growth, tx, goal);
+          const totalCostM = totalCostForBuild(nukeMW, windTargetMw, solarTargetMw, distSolarTargetMw, geoTargetMw, batt, distBatt, gasBase, gasPeak, coal, ee, dr, growth, tx, goal);
           if (totalCostM < best.totalCostM) best = { totalCostM, windTargetMw, solarTargetMw, geoTargetMw, batt };
         }
       }
