@@ -73,6 +73,15 @@ h1 {
   border-color: #999;
 }
 
+.btn-solve-secondary {
+  margin-top: 8px;
+  background: #1f2937;
+}
+
+.btn-solve-secondary:hover {
+  background: #111827;
+}
+
 .grid-main {
   display: grid;
   grid-template-columns: 400px minmax(0, 1fr);
@@ -674,6 +683,12 @@ td:first-child {
 .fin-table tfoot tr.fin-total {
   background: #f0f0f0;
   font-weight: 700;
+}
+
+.table-note {
+  margin: 10px 2px 0;
+  font-size: 11px;
+  color: #666;
 }
 
 .money-inp {

@@ -39,31 +39,31 @@
 
   <div class="grid-main">
     <div class="card inputs-card">
-      <h3>Inputs</h3>
+      <h3>2035 Targets &amp; Inputs</h3>
 
       <h4 class="input-section input-section-with-target"><span>Carbon Free</span><span class="inputs-values-header-inline">2035 target</span></h4>
       <div class="row">
         <div class="row-head">
           <span class="swatch" style="background: #4FC3F7"></span>
-          <span class="lbl has-tooltip" title="Total wind power in 2035 (MW), including existing contracts. New wind in 2035 is total wind minus existing wind in 2035.">Wind</span>
+          <span class="lbl has-tooltip" title="Total utility wind power in 2035 (MW), including existing contracts. New wind in 2035 is total wind minus existing wind in 2035.">Utility Wind</span>
         </div>
-        <div class="slider-wrap"><input type="range" id="p_wind" min="864" max="5000" value="1631" data-default="1631"></div>
-        <span class="val" id="v_wind">1630 MW</span>
+        <div class="slider-wrap"><input type="range" id="p_wind" min="864" max="5000" value="864" data-default="864"></div>
+        <span class="val" id="v_wind">864 MW</span>
       </div>
       <div class="row">
         <div class="row-head">
           <span class="swatch" style="background: #E09328"></span>
           <span class="lbl has-tooltip" title="Total utility solar power in 2035 (MW), including existing contracts after degradation. New utility solar in 2035 is total utility solar minus existing utility solar in 2035.">Utility Solar</span>
         </div>
-        <div class="slider-wrap"><input type="range" id="p_solar" min="806" max="5000" value="967" data-default="967"></div>
-        <span class="val" id="v_solar">966 MW</span>
+        <div class="slider-wrap"><input type="range" id="p_solar" min="806" max="5000" value="806" data-default="806"></div>
+        <span class="val" id="v_solar">806 MW</span>
       </div>
       <div class="row">
         <div class="row-head">
           <span class="swatch" style="background: #C9852F"></span>
-          <span class="lbl has-tooltip" title="Total distributed solar power in 2035 (MW). Annual additions are calculated versus the 2025 baseline of 188 MW.">Distributed Solar</span>
+          <span class="lbl has-tooltip" title="Total local solar power in 2035 (MW). Annual additions are calculated versus the 2025 baseline of 188 MW.">Local Solar</span>
         </div>
-        <div class="slider-wrap"><input type="range" id="p_dist_solar" min="0" max="3000" value="188" data-default="188"></div>
+        <div class="slider-wrap"><input type="range" id="p_dist_solar" min="188" max="3000" value="188" data-default="188"></div>
         <span class="val" id="v_dist_solar">188 MW</span>
       </div>
       <div class="row">
@@ -111,7 +111,7 @@
       <div class="row">
         <div class="row-head">
           <span class="swatch" style="background: #CE93D8"></span>
-          <span class="lbl has-tooltip" title="4-hour battery capacity (MW nameplate). Charges on surplus, discharges on shortfall during the August peak stress test.">Firm Battery</span>
+          <span class="lbl has-tooltip" title="4-hour utility-scale battery capacity (MW nameplate). Charges on surplus, discharges on shortfall during the August peak stress test.">Utility-Scale Battery</span>
         </div>
         <div class="slider-wrap"><input type="range" id="p_batt" min="0" max="2500" value="500" data-default="500"></div>
         <span class="val" id="v_batt">500</span>
@@ -119,7 +119,7 @@
       <div class="row">
         <div class="row-head">
           <span class="swatch" style="background: #F3B6D9"></span>
-          <span class="lbl has-tooltip" title="4-hour distributed battery capacity (MW nameplate). Uses the same reliability logic as firm battery but is tracked separately in the chart and cost table.">Distributed Battery</span>
+          <span class="lbl has-tooltip" title="4-hour local battery capacity (MW nameplate). Uses the same reliability logic as utility-scale battery but is tracked separately in the chart and cost table.">Local Battery</span>
         </div>
         <div class="slider-wrap"><input type="range" id="p_dist_batt" min="0" max="2500" value="0" data-default="0"></div>
         <span class="val" id="v_dist_batt">0</span>
@@ -140,22 +140,7 @@
         <div class="slider-wrap"><input type="range" id="p_dr" min="0" max="1200" value="0" data-default="0"></div>
         <span class="val" id="v_dr">0</span>
       </div>
-      <div class="row row-readout">
-        <div class="row-head">
-          <span class="lbl has-tooltip" title="Total effective generation power in 2035 (MW), excluding battery. Includes nuclear, gas, coal, wind, solar, and geothermal.">2035 Power Sum (No Battery)</span>
-        </div>
-        <span class="val" id="v_total_mw_2035">0 MW</span>
-      </div>
-
       <h4 class="input-section">Assumptions</h4>
-      <div class="row">
-        <div class="row-head">
-          <span class="swatch" style="background: var(--accent)"></span>
-          <span class="lbl has-tooltip" title="Transmission cost of service adder ($/MWh) applied to remote resources (nuclear, coal, wind, solar, gap) in the financial table and gen rate.">TCOS Adder</span>
-        </div>
-        <div class="slider-wrap"><input type="range" id="p_tx" min="0" max="80" value="40" data-default="40" data-snap="false"></div>
-        <span class="val" id="v_tx">$40</span>
-      </div>
       <div class="row">
         <div class="row-head">
           <span class="swatch" style="background: #B0BEC5"></span>
@@ -238,6 +223,7 @@
       </label>
       <button class="btn-reset" onclick="resetInputs()">Reset</button>
       <button class="btn-solve has-tooltip" onclick="autoSolve()" title="Scale New Wind, New Utility Solar, Geothermal, and Battery until the minimum supply margin reaches 15%. Works for any load growth.">Auto-Solve Reliability Gap</button>
+      <button class="btn-solve btn-solve-secondary has-tooltip" onclick="autoSolveZeroEmissions()" title="Set gas and coal to zero, then auto-solve using clean resources and battery to hit the supply-margin goal if a feasible solution is found.">Auto-Solve Zero Emissions</button>
     </div>
 
     <div>
@@ -280,14 +266,15 @@
 
   <div class="grid-bot">
     <div class="card">
-      <h3 class="has-tooltip" title="2035 cost by resource: volume (TWh), base $/MWh, transmission adder for remote resources, and total $M. Editable base prices update the gen rate. Rows under 0.05 TWh are hidden.">Landed Cost Financials (2035 Snapshot)</h3>
+      <h3 class="has-tooltip" title="2035 cost by resource: volume (TWh), base LCOE-style $/MWh, per-resource TCOS, landed $/MWh, and total $M. Landed cost equals base cost plus TCOS. Editable base prices and TCOS values update the generation-rate estimate. Rows under 0.05 TWh are hidden.">Landed Cost Financials (2035 Snapshot)</h3>
       <table class="fin-table">
         <thead>
           <tr>
             <th class="fin-resource">Resource</th>
             <th>Vol</th>
             <th>Base ($)</th>
-            <th>Tx Adder ($)</th>
+            <th>TCOS ($)</th>
+            <th>Total ($)</th>
             <th>Total ($M)</th>
           </tr>
         </thead>
@@ -298,10 +285,52 @@
             <td id="t_vol">--</td>
             <td>Avg: <span id="t_avg">--</span></td>
             <td></td>
+            <td></td>
             <td id="t_cost">--</td>
           </tr>
         </tfoot>
       </table>
+    </div>
+    <div class="card">
+      <h3 class="has-tooltip" title="Year-by-year additions needed to reach the selected 2035 targets, plus the annualized cost of prior additions, new additions made in that year, and any remaining deficit power. This table excludes the legacy fleet and focuses only on the buildout itself.">Annual Buildout &amp; Cost Split</h3>
+      <table class="fin-table">
+        <thead>
+          <tr>
+            <th class="fin-resource">Year</th>
+            <th>Utility Wind</th>
+            <th>Utility Solar</th>
+            <th>Local Solar</th>
+            <th>Geo</th>
+            <th>Utility Battery</th>
+            <th>Local Battery</th>
+            <th>Total Added</th>
+            <th>Prior Additions Cost</th>
+            <th>This Year's Additions Cost</th>
+            <th>Total Buildout Cost</th>
+            <th>Deficit Cost</th>
+            <th>Buildout + Deficit</th>
+          </tr>
+        </thead>
+        <tbody id="buildoutBody"></tbody>
+        <tfoot>
+          <tr class="fin-total">
+            <td>TOTAL</td>
+            <td id="b_wind_total">--</td>
+            <td id="b_solar_total">--</td>
+            <td id="b_dist_solar_total">--</td>
+            <td id="b_geo_total">--</td>
+            <td id="b_batt_total">--</td>
+            <td id="b_dist_batt_total">--</td>
+            <td id="b_added_total">--</td>
+            <td id="b_prior_cost_total">--</td>
+            <td id="b_new_cost_total">--</td>
+            <td id="b_cost_total">--</td>
+            <td id="b_deficit_cost_total">--</td>
+            <td id="b_all_in_total">--</td>
+          </tr>
+        </tfoot>
+      </table>
+      <p class="table-note">These dollar amounts are estimated yearly costs using LCOE-style assumptions. In this model, landed cost = base LCOE-style cost + TCOS. This table excludes the legacy fleet and shows only the buildout: earlier additions stay in the prior-cost column, new resources added in each year appear in that year's additions-cost column, and any remaining gap power is shown separately as deficit cost.</p>
     </div>
   </div>
 </div>
