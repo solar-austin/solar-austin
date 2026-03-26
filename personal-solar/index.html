@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Personal Solar Install Calculator</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="site-shell">
+    <header class="hero">
+      <div>
+        <p class="eyebrow">Personal Solar</p>
+        <h1>Home solar install calculator</h1>
+        <p class="hero-copy">
+          A standalone version of the site focused on one homeowner system: your usage,
+          your retail power rate, your buyback rate, and a simple 20-year outlook.
+        </p>
+      </div>
+      <div class="hero-note">
+        <div class="hero-note-label">Modeled horizon</div>
+        <div class="hero-note-value">20 years</div>
+        <div class="hero-note-copy">Charts below stay on year 1 so the decision stays easy to read.</div>
+      </div>
+    </header>
+
+    <section class="lookup-top">
+      <div class="lookup-card">
+        <div class="lookup-grid">
+          <div class="lookup-copy">
+            <div class="lookup-head">
+              <div>
+                <h3>Google roof lookup</h3>
+                <p>Test a roof by address and optionally prefill the calculator from Google Solar.</p>
+              </div>
+              <span class="lookup-badge">Local test</span>
+            </div>
+
+            <label class="field">
+              <span class="field-head">
+                <span>Street address</span>
+              </span>
+              <input
+                type="text"
+                id="googleAddress"
+                class="text-input"
+                placeholder="123 Main St, Austin, TX"
+                autocomplete="street-address"
+              />
+            </label>
+
+            <div class="lookup-actions">
+              <button type="button" class="ghost-btn" id="googleLookupButton">Look up roof</button>
+              <button type="button" class="ghost-btn" id="googleApplyButton" disabled>Apply to calculator</button>
+            </div>
+
+            <p class="lookup-status" id="googleLookupStatus">
+              Uses `/.netlify/functions/solar-insights` and your local Netlify env var.
+            </p>
+
+            <div class="lookup-results" id="googleLookupResults" hidden>
+              <div class="lookup-result-row">
+                <span>Address</span>
+                <strong id="googleResultAddress">-</strong>
+              </div>
+              <div class="lookup-result-row">
+                <span>Max roof panels</span>
+                <strong id="googleResultPanels">-</strong>
+              </div>
+              <div class="lookup-result-row">
+                <span>Max roof capacity</span>
+                <strong id="googleResultSize">-</strong>
+              </div>
+              <div class="lookup-result-row">
+                <span>Estimated production</span>
+                <strong id="googleResultProduction">-</strong>
+              </div>
+              <div class="lookup-result-row">
+                <span>Install cost benchmark</span>
+                <strong id="googleResultInstallCost">-</strong>
+              </div>
+              <div class="lookup-result-row">
+                <span>Benchmark source</span>
+                <strong id="googleResultInstallCostSource">-</strong>
+              </div>
+            </div>
+
+            <p class="lookup-status lookup-error" id="googleLookupError" hidden></p>
+          </div>
+          <div class="lookup-map-wrap">
+            <div class="lookup-map-frame">
+              <iframe
+                id="googleLookupMap"
+                title="Address map"
+                loading="lazy"
+                referrerpolicy="no-referrer-when-downgrade"
+                src="https://www.google.com/maps?q=Austin%2C%20TX&output=embed"
+              ></iframe>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="kpi-grid">
+      <article class="kpi-card">
+        <div class="kpi-label">Average monthly savings</div>
+        <div class="kpi-value" id="kpiYearOneSavings">$0</div>
+        <div class="kpi-foot" id="kpiOffset">0% bill reduction</div>
+      </article>
+      <article class="kpi-card">
+        <div class="kpi-label">Average monthly bill with solar</div>
+        <div class="kpi-value" id="kpiBillWithSolar">$0</div>
+        <div class="kpi-foot" id="kpiBillWithoutSolar">$0 without solar</div>
+      </article>
+      <article class="kpi-card">
+        <div class="kpi-label">20-year net value</div>
+        <div class="kpi-value" id="kpiTenYearValue">$0</div>
+        <div class="kpi-foot" id="kpiPayback">Payback not reached</div>
+      </article>
+      <article class="kpi-card">
+        <div class="kpi-label">Year 1 solar offset</div>
+        <div class="kpi-value" id="kpiSolarOffset">0%</div>
+        <div class="kpi-foot" id="kpiExported">0 kWh exported</div>
+      </article>
+    </section>
+
+    <main class="layout">
+      <section class="panel inputs-panel">
+        <div class="panel-head">
+          <h2>Inputs</h2>
+          <div class="panel-actions">
+            <button type="button" class="ghost-btn" id="solveButton">Solve best size</button>
+            <button type="button" class="ghost-btn" id="resetButton">Reset</button>
+          </div>
+        </div>
+
+        <div class="input-group">
+          <h3>Home and system</h3>
+
+          <label class="field">
+            <span class="field-head">
+              <span>Monthly home usage</span>
+              <strong id="monthlyUsageValue">1,167 kWh</strong>
+            </span>
+            <input type="range" id="monthlyUsage" min="300" max="2500" step="10" value="1167" />
+          </label>
+
+          <label class="field">
+            <span class="field-head">
+              <span>Solar system size</span>
+              <strong id="systemSizeValue">9.0 kW</strong>
+            </span>
+            <input type="range" id="systemSize" min="0" max="32" step="0.1" value="9" />
+          </label>
+
+          <label class="field">
+            <span class="field-head">
+              <span>Battery size</span>
+              <strong id="batteryPowerValue">0.0 kW</strong>
+            </span>
+            <input type="range" id="batteryPower" min="0" max="20" step="0.5" value="0" />
+          </label>
+
+          <div class="inline-cost-card">
+            <div class="inline-cost-row">
+              <span>Panels total</span>
+              <strong id="panelCostInline">$24,300</strong>
+            </div>
+            <div class="inline-cost-row">
+              <span>Battery total</span>
+              <strong id="batteryCostInline">$0</strong>
+            </div>
+          </div>
+
+          <label class="field">
+            <span class="field-head">
+              <span>Installed cost per kW</span>
+              <strong id="installCostValue">$2,700/kW</strong>
+            </span>
+            <input type="range" id="installCost" min="1000" max="6000" step="50" value="2700" />
+          </label>
+
+            <label class="field">
+              <span class="field-head">
+                <span>Battery install cost</span>
+                <strong id="batteryCostValue">$250/kWh</strong>
+              </span>
+              <input type="range" id="batteryCost" min="150" max="1200" step="10" value="250" />
+            </label>
+        </div>
+
+        <div class="input-group">
+          <h3>Financing</h3>
+
+          <label class="field">
+            <span class="field-head">
+              <span>Loan term</span>
+              <strong id="loanTermValue">No loan</strong>
+            </span>
+            <select id="loanTerm" class="scenario-select" aria-label="Loan term">
+              <option value="0" selected>No loan</option>
+              <option value="5">5 years</option>
+              <option value="10">10 years</option>
+              <option value="15">15 years</option>
+              <option value="20">20 years</option>
+            </select>
+          </label>
+
+          <label class="field">
+            <span class="field-head">
+              <span>Loan interest rate</span>
+              <strong id="loanInterestValue">6.0%</strong>
+            </span>
+            <input type="range" id="loanInterest" min="0" max="15" step="0.1" value="6" />
+          </label>
+        </div>
+
+        <div class="input-group">
+          <h3>Power plan</h3>
+
+          <label class="field">
+            <span class="field-head">
+              <span>Plan type</span>
+              <strong id="planTypeValue">Net billing</strong>
+            </span>
+            <select id="planType" class="scenario-select" aria-label="Power plan type">
+              <option value="net_billing" selected>Net billing</option>
+              <option value="net_metering">1:1 net metering</option>
+              <option value="no_export_credit">No export credit</option>
+              <option value="value_of_solar">Value of solar</option>
+            </select>
+          </label>
+
+          <p class="lookup-status" id="planTypeDescription">
+            Imports are charged at retail and exports are credited at a separate export rate.
+          </p>
+
+          <label class="field">
+            <span class="field-head">
+              <span>Retail energy rate</span>
+              <strong id="retailRateValue">14.5 cents/kWh</strong>
+            </span>
+            <input type="range" id="retailRate" min="0" max="30" step="0.1" value="14.5" />
+          </label>
+
+          <label class="field" id="buybackRateField">
+            <span class="field-head">
+              <span id="buybackRateLabel">Export credit rate</span>
+              <strong id="buybackRateValue">6.0 cents/kWh</strong>
+            </span>
+            <input type="range" id="buybackRate" min="0" max="30" step="0.1" value="6" />
+          </label>
+
+          <label class="field">
+            <span class="field-head">
+              <span>Annual utility rate escalation</span>
+              <strong id="rateEscalationValue">2.5%</strong>
+            </span>
+            <input type="range" id="rateEscalation" min="0" max="10" step="0.1" value="2.5" />
+          </label>
+        </div>
+
+        <div class="input-group">
+          <h3>Solar assumptions</h3>
+
+            <label class="field" id="productionPerKwField">
+              <span class="field-head">
+                <span>Solar production</span>
+                <strong id="productionValue">1,500 kWh per kW-year</strong>
+              </span>
+              <input type="range" id="productionPerKw" min="1100" max="1900" step="10" value="1500" />
+          </label>
+
+          <label class="field">
+            <span class="field-head">
+              <span>Annual panel degradation</span>
+              <strong id="degradationValue">0.5%</strong>
+            </span>
+            <input type="range" id="degradation" min="0" max="1.5" step="0.1" value="0.5" />
+          </label>
+        </div>
+
+      </section>
+
+      <section class="results-panel">
+        <section class="panel">
+          <div class="panel-head">
+            <h2>Year 1 energy</h2>
+            <p>Monthly household usage versus solar production in kWh.</p>
+          </div>
+          <div class="chart-wrap">
+            <canvas id="monthlyChart"></canvas>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head">
+            <h2>System size vs solar</h2>
+            <p>Total annual production plus marginal productivity as panels fill from best roof areas to worse ones.</p>
+          </div>
+          <div class="chart-wrap short-chart">
+            <canvas id="sizeMappingChart"></canvas>
+          </div>
+        </section>
+
+        <section class="panel segment-panel" id="googleSegmentTableWrap" hidden>
+          <div class="panel-head">
+            <h2>Roof segment productivity</h2>
+            <p id="googleSegmentTableMeta">Waiting for lookup</p>
+          </div>
+          <div class="segment-table-scroll">
+            <table class="summary-table compact-table" id="googleSegmentTable">
+                <thead>
+                  <tr>
+                    <th>Azimuth</th>
+                    <th>Pitch</th>
+                    <th>Panels</th>
+                    <th>kWh/panel</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td colspan="4">No roof data loaded.</td>
+                  </tr>
+                </tbody>
+              </table>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head">
+            <h2>Representative day</h2>
+            <p>One sample day showing household load, solar output, and battery discharge.</p>
+          </div>
+          <div class="day-month-row">
+            <label class="day-month-label" for="dayMonth">Month</label>
+            <div class="day-month-slider">
+              <input type="range" id="dayMonth" min="0" max="11" step="1" value="6" />
+              <div class="day-month-scale">
+                <span>Jan</span>
+                <span id="dayMonthValue">Jul</span>
+                <span>Dec</span>
+              </div>
+            </div>
+          </div>
+          <div class="chart-wrap short-chart">
+            <canvas id="dailyChart"></canvas>
+          </div>
+        </section>
+
+        <section class="two-up">
+          <article class="panel">
+            <div class="panel-head">
+              <h2>Average monthly economics</h2>
+            </div>
+            <table class="summary-table">
+              <tbody>
+                <tr><th>Bill without solar</th><td id="billWithoutSolarCell">$0</td></tr>
+                <tr><th>Bill with solar</th><td id="billWithSolarCell">$0</td></tr>
+                <tr><th>Imported from grid</th><td id="gridImportCell">0 kWh</td></tr>
+                <tr><th>Exported to grid</th><td id="gridExportCell">0 kWh</td></tr>
+                <tr><th>Battery discharge</th><td id="batteryDischargeCell">0 kWh</td></tr>
+                <tr><th>Buyback credits</th><td id="buybackCreditsCell">$0</td></tr>
+              </tbody>
+            </table>
+          </article>
+
+          <article class="panel">
+            <div class="panel-head">
+              <h2>Cost breakdown</h2>
+            </div>
+            <table class="summary-table">
+              <tbody>
+                <tr><th>Panel system cost</th><td id="panelInstallCostCell">$0</td></tr>
+                <tr><th>Battery system cost</th><td id="batteryInstallCostCell">$0</td></tr>
+                <tr><th>Total installed cost</th><td id="totalInstallCostCell">$0</td></tr>
+                <tr><th>Annual loan payment</th><td id="annualLoanPaymentCell">$0</td></tr>
+                <tr><th>Total interest paid</th><td id="totalInterestPaidCell">$0</td></tr>
+                <tr><th>Total repaid over loan</th><td id="totalLoanPaidCell">$0</td></tr>
+              </tbody>
+            </table>
+          </article>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head">
+            <h2>20-year outlook</h2>
+          </div>
+          <table class="summary-table">
+            <tbody>
+              <tr><th>Total savings</th><td id="tenYearSavingsCell">$0</td></tr>
+              <tr><th>Net value after install cost</th><td id="tenYearNetCell">$0</td></tr>
+              <tr><th>Average annual savings</th><td id="avgAnnualSavingsCell">$0</td></tr>
+              <tr><th>Year 20 savings</th><td id="yearTenSavingsCell">$0</td></tr>
+              <tr><th>Estimated payback</th><td id="paybackCell">Not in 20 years</td></tr>
+              <tr><th>Year 20 solar production</th><td id="yearTenSolarCell">0 kWh</td></tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head">
+            <h2>Year 1 bills</h2>
+            <p>Monthly bill comparison in USD with and without solar.</p>
+          </div>
+          <div class="chart-wrap">
+            <canvas id="billChart"></canvas>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head">
+            <h2>Payback trend</h2>
+            <p>Cumulative cost path: full utility bills versus install cost plus solar-era bills.</p>
+          </div>
+          <div class="chart-wrap short-chart">
+            <canvas id="paybackChart"></canvas>
+          </div>
+        </section>
+
+        <section class="panel callout">
+          <h2>How this calculator works</h2>
+          <p>
+            This version is intentionally simple. It simulates one year of monthly and hourly
+            load versus solar output, values imports at your retail rate, values exports at your
+            buyback rate, uses a 4-hour battery that charges from solar surplus and discharges
+            into later deficits, and rolls the savings forward for 20 years using your selected
+            utility escalation and solar degradation assumptions.
+          </p>
+        </section>
+      </section>
+    </main>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
