@@ -73,7 +73,7 @@ exports.handler = async function handler(event) {
     return json(405, { error: 'Method not allowed' });
   }
 
-  const apiKey = process.env.GOOGLE_SOLAR_API_KEY || process.env.GOOGLE_MAPS_API_KEY;
+  const apiKey = process.env.GOOGLE_MAPS_API_KEY;
   if (!apiKey) {
     return json(500, { error: 'Missing GOOGLE_SOLAR_API_KEY or GOOGLE_MAPS_API_KEY environment variable.' });
   }
