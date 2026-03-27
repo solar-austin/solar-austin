@@ -1,6 +1,6 @@
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const MONTH_DAYS = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
-const FINANCIAL_HORIZON_YEARS = 20;
+const FINANCIAL_HORIZON_YEARS = 30;
 const DEFAULT_FIXED_UTILITY_CHARGE = 15;
 const DAY_CHART_INTERVALS_PER_HOUR = 4;
 const DAY_CHART_DT_HOURS = 1 / DAY_CHART_INTERVALS_PER_HOUR;
@@ -25,7 +25,6 @@ const DEFAULTS = {
   buybackRate: 6,
   rateEscalation: 2.5,
   productionPerKw: 1500,
-  degradation: 0.5,
 };
 
 const FIELD_FORMATTERS = {
@@ -39,7 +38,45 @@ const FIELD_FORMATTERS = {
   buybackRate: (value) => `${formatNumber(value, 1)} cents/kWh`,
   rateEscalation: (value) => `${formatNumber(value, 1)}%`,
   productionPerKw: (value) => `${formatNumber(value, 0)} kWh per kW-year`,
-  degradation: (value) => `${formatNumber(value, 1)}%`,
+};
+
+const APP_MODE = (() => {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const mode = (params.get('mode') || '').trim().toLowerCase();
+    const utility = (params.get('utility') || '').trim().toLowerCase();
+    if (['austin', 'austin-energy', 'austin_energy'].includes(mode) || ['austin', 'austin-energy', 'austin_energy'].includes(utility)) {
+      return 'austin_energy';
+    }
+  } catch (error) {
+    // Ignore URL parsing errors and fall back to default mode.
+  }
+  return 'default';
+})();
+
+const AUSTIN_ENERGY_DEFAULTS = {
+  retailRate: 11.6,
+  vosRate: 9.91,
+  planType: 'value_of_solar',
+  installCost: 2950,
+};
+
+const AUSTIN_ENERGY_RATES = {
+  customerCharge: 16.5,
+  vosRate: 0.0991,
+  citySalesTaxRate: 0.01,
+  tierRates: [
+    { maxKwh: 300, rate: 0.04640 },
+    { maxKwh: 900, rate: 0.05138 },
+    { maxKwh: 2000, rate: 0.07525 },
+    { maxKwh: Infinity, rate: 0.10884 },
+  ],
+  perKwhCharges: {
+    powerSupplyAdjustment: 0.04118,
+    psaAdminAdjustment: -0.00206,
+    regulatoryCharge: 0.01338,
+    communityBenefitCharge: 0.01275,
+  },
 };
 
 const PLAN_TYPE_DEFINITIONS = {
@@ -75,6 +112,7 @@ const PLAN_TYPE_DEFINITIONS = {
 
 let monthlyChart;
 let billChart;
+let gridFlowChart;
 let dailyChart;
 let paybackChart;
 let sizeMappingChart;
@@ -124,6 +162,15 @@ function formatCurrency(value) {
     style: 'currency',
     currency: 'USD',
     maximumFractionDigits: 0,
+  }).format(value);
+}
+
+function formatCurrencyPrecise(value, digits = 2) {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
   }).format(value);
 }
 
@@ -193,6 +240,7 @@ function getInstallCostBenchmark(location) {
 
 function applyInstallCostBenchmark(benchmark) {
   if (!benchmark || !Number.isFinite(benchmark.value)) return false;
+  if (APP_MODE === 'austin_energy') return false;
   const input = document.getElementById('installCost');
   if (!input) return false;
   const min = Number(input.min);
@@ -241,13 +289,12 @@ function getInputs() {
     installCost: solarInstallCost + batteryInstallCost,
     loanTermYears,
     loanInterestRate,
-    planType: document.getElementById('planType').value,
+    planType: APP_MODE === 'austin_energy' ? 'value_of_solar' : document.getElementById('planType').value,
     fixedCharge: DEFAULT_FIXED_UTILITY_CHARGE,
-    retailRate: Number(document.getElementById('retailRate').value) / 100,
-    buybackRate: Number(document.getElementById('buybackRate').value) / 100,
-    rateEscalation: Number(document.getElementById('rateEscalation').value) / 100,
+    retailRate: APP_MODE === 'austin_energy' ? AUSTIN_ENERGY_DEFAULTS.retailRate / 100 : Number(document.getElementById('retailRate').value) / 100,
+    buybackRate: APP_MODE === 'austin_energy' ? AUSTIN_ENERGY_RATES.vosRate : Number(document.getElementById('buybackRate').value) / 100,
+    rateEscalation: APP_MODE === 'austin_energy' ? 0 : Number(document.getElementById('rateEscalation').value) / 100,
     productionPerKw: Number(document.getElementById('productionPerKw').value),
-    degradation: Number(document.getElementById('degradation').value) / 100,
   };
 }
 
@@ -290,9 +337,38 @@ function calculateAnnualLoanPayment(principal, annualRate, termYears) {
   return monthlyPayment * 12;
 }
 
+function calculateAustinEnergyUsageBill(usageKwh, vosSolarCredit = 0) {
+  const safeUsage = Math.max(0, usageKwh);
+  let remainingUsage = safeUsage;
+  let previousTierMax = 0;
+  let tierEnergyCharge = 0;
+
+  AUSTIN_ENERGY_RATES.tierRates.forEach((tier) => {
+    if (remainingUsage <= 0) return;
+    const tierSpan = Number.isFinite(tier.maxKwh) ? Math.max(0, tier.maxKwh - previousTierMax) : remainingUsage;
+    const billedKwh = Math.min(remainingUsage, tierSpan);
+    tierEnergyCharge += billedKwh * tier.rate;
+    remainingUsage -= billedKwh;
+    previousTierMax = tier.maxKwh;
+  });
+
+  const usageChargesPerKwh = Object.values(AUSTIN_ENERGY_RATES.perKwhCharges).reduce((sum, rate) => sum + rate, 0);
+  const usageCharges = safeUsage * usageChargesPerKwh;
+  // VOS credit is subtracted from the pre-tax subtotal so that city sales tax
+  // is only applied to the net amount owed, not to the credited solar value.
+  const subtotalBeforeTax = AUSTIN_ENERGY_RATES.customerCharge + tierEnergyCharge + usageCharges - Math.max(0, vosSolarCredit);
+  const citySalesTax = subtotalBeforeTax * AUSTIN_ENERGY_RATES.citySalesTaxRate;
+
+  return {
+    subtotalBeforeTax,
+    citySalesTax,
+    total: subtotalBeforeTax + citySalesTax,
+  };
+}
+
 function buildYearModel(inputs, yearIndex = 0, startingCreditBalance = 0) {
   const solarModel = buildSolarModel(inputs);
-  const solarDegradationFactor = Math.pow(1 - inputs.degradation, yearIndex);
+  const solarDegradationFactor = Math.pow(1 - 0.005, yearIndex);
   const annualUsage = inputs.annualUsage;
   const annualSolar = solarModel.annualSolarBase * solarDegradationFactor;
   const rateFactor = Math.pow(1 + inputs.rateEscalation, yearIndex);
@@ -310,27 +386,40 @@ function buildYearModel(inputs, yearIndex = 0, startingCreditBalance = 0) {
       inputs.batteryPower,
       solarModel.hourlyProfiles[monthIndex]
       );
-      const billWithoutSolar = (usage * retailRate) + inputs.fixedCharge;
+      const isAustinEnergyMode = APP_MODE === 'austin_energy';
       let grossBillWithSolar = 0;
       let exportCredits = 0;
-      switch (inputs.planType) {
-        case 'net_metering':
-          exportCredits = flow.exported * retailRate;
-          grossBillWithSolar = (flow.imported * retailRate) + inputs.fixedCharge - exportCredits;
-          break;
-        case 'no_export_credit':
-          exportCredits = 0;
-          grossBillWithSolar = (flow.imported * retailRate) + inputs.fixedCharge;
-          break;
-        case 'value_of_solar':
-          exportCredits = solar * buybackRate;
-          grossBillWithSolar = (usage * retailRate) + inputs.fixedCharge - exportCredits;
-          break;
-        case 'net_billing':
-        default:
-          exportCredits = flow.exported * buybackRate;
-          grossBillWithSolar = (flow.imported * retailRate) + inputs.fixedCharge - exportCredits;
-          break;
+      let billWithoutSolar = 0;
+      if (isAustinEnergyMode) {
+        // Bill all usage at Austin Energy tiered rates with no solar credit.
+        billWithoutSolar = calculateAustinEnergyUsageBill(usage).total;
+        // VOS credits all solar generation at the published VOS rate. The credit
+        // is applied to the pre-tax subtotal so that city sales tax is only
+        // assessed on the net amount owed, matching Austin Energy's billing
+        // practice.
+        exportCredits = solar * AUSTIN_ENERGY_RATES.vosRate;
+        grossBillWithSolar = calculateAustinEnergyUsageBill(usage, exportCredits).total;
+      } else {
+        billWithoutSolar = (usage * retailRate) + inputs.fixedCharge;
+        switch (inputs.planType) {
+          case 'net_metering':
+            exportCredits = flow.exported * retailRate;
+            grossBillWithSolar = (flow.imported * retailRate) + inputs.fixedCharge - exportCredits;
+            break;
+          case 'no_export_credit':
+            exportCredits = 0;
+            grossBillWithSolar = (flow.imported * retailRate) + inputs.fixedCharge;
+            break;
+          case 'value_of_solar':
+            exportCredits = solar * buybackRate;
+            grossBillWithSolar = (usage * retailRate) + inputs.fixedCharge - exportCredits;
+            break;
+          case 'net_billing':
+          default:
+            exportCredits = flow.exported * buybackRate;
+            grossBillWithSolar = (flow.imported * retailRate) + inputs.fixedCharge - exportCredits;
+            break;
+        }
       }
       const creditApplied = Math.min(creditBalance, Math.max(0, grossBillWithSolar));
       const billWithSolar = Math.max(0, grossBillWithSolar - creditApplied);
@@ -690,9 +779,8 @@ function buildTenYearModel(inputs) {
     : 0;
   const totalLoanPaid = hasLoan ? (annualLoanPayment * inputs.loanTermYears) : totalInstallCost;
   const totalInterestPaid = Math.max(0, totalLoanPaid - totalInstallCost);
-  const netInstallCost = totalLoanPaid;
 
-  let cumulativeCashAdvantage = hasLoan ? 0 : -totalInstallCost;
+  let cumulativeCashAdvantage = -totalInstallCost;
   let paybackYear = null;
 
   yearlyResults.forEach((result, index) => {
@@ -713,7 +801,6 @@ function buildTenYearModel(inputs) {
     annualLoanPayment,
       totalLoanPaid,
       totalInterestPaid,
-      netInstallCost,
       endingCreditBalance: creditBalance,
       totalSavings: yearlyResults.reduce((sum, result) => sum + result.savings, 0),
       averageSavings: yearlyResults.reduce((sum, result) => sum + result.savings, 0) / yearlyResults.length,
@@ -742,23 +829,102 @@ function updateValueLabels() {
   const inputs = getInputs();
   const panelInline = document.getElementById('panelCostInline');
   const batteryInline = document.getElementById('batteryCostInline');
+  const totalCostInline = document.getElementById('totalCostInline');
   if (panelInline) panelInline.textContent = formatCurrency(inputs.solarInstallCost);
   if (batteryInline) batteryInline.textContent = formatCurrency(inputs.batteryInstallCost);
+  if (totalCostInline) {
+    const rawTotal = inputs.solarInstallCost + inputs.batteryInstallCost;
+    const total = APP_MODE === 'austin_energy' ? rawTotal - 2500 : rawTotal;
+    totalCostInline.textContent = formatCurrency(total);
+  }
 
   const loanTermLabel = document.getElementById('loanTermValue');
+  const loanTermValue = Number(document.getElementById('loanTerm').value);
   if (loanTermLabel) {
-    const loanTermValue = Number(document.getElementById('loanTerm').value);
     loanTermLabel.textContent = loanTermValue > 0 ? `${loanTermValue} years` : 'No loan';
+  }
+
+  const loanInterestField = document.getElementById('loanInterestField');
+  if (loanInterestField) {
+    loanInterestField.hidden = loanTermValue === 0;
   }
 }
 
 function syncPowerPlanUi() {
+  const planTypeField = document.getElementById('planTypeField');
+  const retailRateField = document.getElementById('retailRateField');
+  const buybackField = document.getElementById('buybackRateField');
+  const rateEscalationField = document.getElementById('rateEscalationField');
+  const planTypeSelect = document.getElementById('planType');
   const planType = document.getElementById('planType')?.value || DEFAULTS.planType;
-  const definition = PLAN_TYPE_DEFINITIONS[planType] || PLAN_TYPE_DEFINITIONS.net_billing;
+  let definition = PLAN_TYPE_DEFINITIONS[planType] || PLAN_TYPE_DEFINITIONS.net_billing;
   const retailRateInput = document.getElementById('retailRate');
   const buybackRateInput = document.getElementById('buybackRate');
   const buybackLabel = document.getElementById('buybackRateLabel');
   const planTypeDescription = document.getElementById('planTypeDescription');
+
+  if (APP_MODE === 'austin_energy') {
+    if (planTypeSelect) {
+      planTypeSelect.value = AUSTIN_ENERGY_DEFAULTS.planType;
+    }
+    if (buybackRateInput) {
+      buybackRateInput.value = String(AUSTIN_ENERGY_DEFAULTS.vosRate);
+    }
+    definition = PLAN_TYPE_DEFINITIONS.value_of_solar;
+    if (planTypeField) {
+      planTypeField.hidden = true;
+      planTypeField.style.display = 'none';
+    }
+    if (retailRateField) {
+      retailRateField.hidden = true;
+      retailRateField.style.display = 'none';
+    }
+    if (buybackField) {
+      buybackField.hidden = true;
+      buybackField.style.display = 'none';
+    }
+    if (rateEscalationField) {
+      rateEscalationField.hidden = true;
+      rateEscalationField.style.display = 'none';
+    }
+    const austinRebateRow = document.getElementById('austinRebateRow');
+    if (austinRebateRow) {
+      austinRebateRow.hidden = false;
+    }
+    const austinRebateInline = document.getElementById('austinRebateInline');
+    if (austinRebateInline) {
+      austinRebateInline.textContent = '-$2,500';
+    }
+    document.querySelectorAll('.benchmark-row').forEach((row) => {
+      row.hidden = true;
+      row.style.display = 'none';
+    });
+  } else {
+    if (planTypeField) {
+      planTypeField.hidden = false;
+      planTypeField.style.display = '';
+    }
+    if (retailRateField) {
+      retailRateField.hidden = false;
+      retailRateField.style.display = '';
+    }
+    if (buybackField) {
+      buybackField.hidden = false;
+      buybackField.style.display = '';
+    }
+    if (rateEscalationField) {
+      rateEscalationField.hidden = false;
+      rateEscalationField.style.display = '';
+    }
+    const austinRebateRow = document.getElementById('austinRebateRow');
+    if (austinRebateRow) {
+      austinRebateRow.hidden = true;
+    }
+    document.querySelectorAll('.benchmark-row').forEach((row) => {
+      row.hidden = false;
+      row.style.display = '';
+    });
+  }
 
   if (definition.lockBuybackToRetail && retailRateInput && buybackRateInput) {
     buybackRateInput.value = retailRateInput.value;
@@ -767,27 +933,94 @@ function syncPowerPlanUi() {
     buybackRateInput.value = String(definition.forceBuybackRate);
   }
   if (buybackRateInput) {
-    buybackRateInput.disabled = definition.lockBuybackToRetail || definition.forceBuybackRate !== null;
+    buybackRateInput.disabled = APP_MODE === 'austin_energy' || definition.lockBuybackToRetail || definition.forceBuybackRate !== null;
   }
   if (buybackLabel) {
     buybackLabel.textContent = definition.buybackLabel;
   }
   if (planTypeDescription) {
-    planTypeDescription.textContent = definition.description;
+    if (APP_MODE === 'austin_energy') {
+      planTypeDescription.textContent = 'Using Austin Energy configuration. All home usage is billed normally and all solar generation is credited at the Value of Solar rate. See docs for more info.';
+    } else {
+      planTypeDescription.textContent = definition.description;
+    }
   }
 }
 
-function updateKpis(yearOne, tenYear, netInstallCost) {
+function applyAppModeDefaults() {
+  if (APP_MODE !== 'austin_energy') return;
+  const retailRateInput = document.getElementById('retailRate');
+  const buybackRateInput = document.getElementById('buybackRate');
+  const planTypeSelect = document.getElementById('planType');
+  const installCostInput = document.getElementById('installCost');
+  if (retailRateInput) {
+    retailRateInput.value = String(AUSTIN_ENERGY_DEFAULTS.retailRate);
+  }
+  if (buybackRateInput) {
+    buybackRateInput.value = String(AUSTIN_ENERGY_DEFAULTS.vosRate);
+  }
+  if (planTypeSelect) {
+    planTypeSelect.value = AUSTIN_ENERGY_DEFAULTS.planType;
+  }
+  if (installCostInput) {
+    installCostInput.value = String(AUSTIN_ENERGY_DEFAULTS.installCost);
+  }
+  const rateEscalationInput = document.getElementById('rateEscalation');
+  if (rateEscalationInput) {
+    rateEscalationInput.value = '0';
+  }
+  const heroEyebrow = document.getElementById('heroEyebrow');
+  if (heroEyebrow) {
+    heroEyebrow.textContent = 'Austin Energy Solar';
+  }
+  const heroTitle = document.getElementById('heroTitle');
+  if (heroTitle) {
+    heroTitle.textContent = 'Personal Solar Calculator';
+  }
+  const heroDescription = document.getElementById('heroDescription');
+  if (heroDescription) {
+    heroDescription.textContent = "Model your home solar system using Austin Energy\u2019s Value of Solar tariff and published rate schedule. See your estimated monthly bills, credits, and 30-year financial outlook based on real Austin Energy pricing.";
+  }
+}
+
+function syncAustinDocs() {
+  const wrap = document.getElementById('austinDocsWrap');
+  if (!wrap) return;
+  const isAustinEnergyMode = APP_MODE === 'austin_energy';
+  wrap.hidden = !isAustinEnergyMode;
+  wrap.style.display = isAustinEnergyMode ? '' : 'none';
+  if (!isAustinEnergyMode) return;
+
+  const values = {
+    austinDocVosRate: formatNumber(AUSTIN_ENERGY_RATES.vosRate * 100, 2),
+    austinDocCustomerCharge: formatCurrencyPrecise(AUSTIN_ENERGY_RATES.customerCharge),
+    austinDocTier1: formatNumber(AUSTIN_ENERGY_RATES.tierRates[0].rate * 100, 3),
+    austinDocTier2: formatNumber(AUSTIN_ENERGY_RATES.tierRates[1].rate * 100, 3),
+    austinDocTier3: formatNumber(AUSTIN_ENERGY_RATES.tierRates[2].rate * 100, 3),
+    austinDocTier4: formatNumber(AUSTIN_ENERGY_RATES.tierRates[3].rate * 100, 3),
+    austinDocPsa: formatNumber(AUSTIN_ENERGY_RATES.perKwhCharges.powerSupplyAdjustment * 100, 3),
+    austinDocPsaAdmin: formatNumber(AUSTIN_ENERGY_RATES.perKwhCharges.psaAdminAdjustment * 100, 3),
+    austinDocRegulatory: formatNumber(AUSTIN_ENERGY_RATES.perKwhCharges.regulatoryCharge * 100, 3),
+    austinDocCommunity: formatNumber(AUSTIN_ENERGY_RATES.perKwhCharges.communityBenefitCharge * 100, 3),
+    austinDocTax: formatNumber(AUSTIN_ENERGY_RATES.citySalesTaxRate * 100, 1),
+  };
+
+  Object.entries(values).forEach(([id, value]) => {
+    const element = document.getElementById(id);
+    if (element) {
+      element.textContent = value;
+    }
+  });
+}
+
+function updateKpis(yearOne, tenYear) {
   const averageMonthlySavings = yearOne.savings / 12;
   const averageMonthlyBillWithSolar = yearOne.billWithSolar / 12;
   const averageMonthlyBillWithoutSolar = yearOne.billWithoutSolar / 12;
   const billReductionPct = yearOne.billWithoutSolar > 0
     ? (yearOne.savings / yearOne.billWithoutSolar) * 100
     : 0;
-  const solarOffsetPct = yearOne.usageTotal > 0
-    ? ((yearOne.directSolarTotal + yearOne.batteryDischargeTotal + yearOne.exportTotal) / yearOne.usageTotal) * 100
-    : 0;
-  const tenYearNet = tenYear.totalSavings - netInstallCost;
+  const tenYearNet = tenYear.totalSavings - tenYear.totalInstallCost;
 
   document.getElementById('kpiYearOneSavings').textContent = formatCurrency(averageMonthlySavings);
   document.getElementById('kpiOffset').textContent = `${formatNumber(billReductionPct, 1)}% bill reduction`;
@@ -795,21 +1028,11 @@ function updateKpis(yearOne, tenYear, netInstallCost) {
   document.getElementById('kpiBillWithoutSolar').textContent = `${formatCurrency(averageMonthlyBillWithoutSolar)} without solar`;
   document.getElementById('kpiTenYearValue').textContent = formatCurrency(tenYearNet);
   document.getElementById('kpiPayback').textContent = tenYear.paybackYear ? `Estimated payback in year ${tenYear.paybackYear}` : 'Payback not reached';
-  document.getElementById('kpiSolarOffset').textContent = `${formatNumber(solarOffsetPct, 1)}%`;
-  document.getElementById('kpiExported').textContent = `${formatNumber(yearOne.exportTotal, 0)} kWh exported`;
 }
 
-function updateTables(yearOne, tenYear, netInstallCost) {
-  const buybackCredits = sumBy(yearOne.monthlyRows, 'exportCredits') / 12;
+function updateTables(yearOne, tenYear) {
   const finalYear = tenYear.yearlyResults[FINANCIAL_HORIZON_YEARS - 1];
-  const tenYearNet = tenYear.totalSavings - netInstallCost;
-
-  document.getElementById('billWithoutSolarCell').textContent = formatCurrency(yearOne.billWithoutSolar / 12);
-  document.getElementById('billWithSolarCell').textContent = formatCurrency(yearOne.billWithSolar / 12);
-  document.getElementById('gridImportCell').textContent = `${formatNumber(yearOne.importTotal / 12, 0)} kWh`;
-  document.getElementById('gridExportCell').textContent = `${formatNumber(yearOne.exportTotal / 12, 0)} kWh`;
-  document.getElementById('batteryDischargeCell').textContent = `${formatNumber(yearOne.batteryDischargeTotal / 12, 0)} kWh`;
-  document.getElementById('buybackCreditsCell').textContent = formatCurrency(buybackCredits);
+  const tenYearNet = tenYear.totalSavings - tenYear.totalInstallCost;
   document.getElementById('panelInstallCostCell').textContent = formatCurrency(tenYear.totalPanelInstallCost);
   document.getElementById('batteryInstallCostCell').textContent = formatCurrency(tenYear.totalBatteryInstallCost);
   document.getElementById('totalInstallCostCell').textContent = formatCurrency(tenYear.totalInstallCost);
@@ -823,6 +1046,29 @@ function updateTables(yearOne, tenYear, netInstallCost) {
   document.getElementById('yearTenSavingsCell').textContent = formatCurrency(finalYear.savings);
   document.getElementById('paybackCell').textContent = tenYear.paybackYear ? `Year ${tenYear.paybackYear}` : `Not in ${FINANCIAL_HORIZON_YEARS} years`;
   document.getElementById('yearTenSolarCell').textContent = `${formatNumber(finalYear.solarTotal, 0)} kWh`;
+
+  const monthlyBillsTable = document.getElementById('monthlyBillsTable');
+  if (monthlyBillsTable) {
+    monthlyBillsTable.querySelector('tbody').innerHTML = yearOne.monthlyRows.map((row, i) => {
+      const diffClass = row.billSavings > 0 ? 'diff-savings' : row.billSavings < 0 ? 'diff-cost' : '';
+      const rowClass = i % 2 === 1 ? ' class="bills-row-alt"' : '';
+      const tdDiffClass = diffClass ? `cell-diff ${diffClass}` : 'cell-diff';
+      return `<tr${rowClass}><td>${row.month}</td><td>${formatCurrency(row.billWithoutSolar)}</td><td class="cell-with-solar">${formatCurrency(row.billWithSolar)}</td><td class="${tdDiffClass}">${formatCurrency(row.billSavings)}</td></tr>`;
+    }).join('');
+  }
+
+  const monthlyFlowTable = document.getElementById('monthlyFlowTable');
+  if (monthlyFlowTable) {
+    monthlyFlowTable.querySelector('tbody').innerHTML = yearOne.monthlyRows.map((row) => `
+      <tr>
+        <td>${row.month}</td>
+        <td>${formatNumber(row.usage, 0)} kWh</td>
+        <td>${formatNumber(row.imported, 0)} kWh</td>
+        <td>${formatNumber(row.exported, 0)} kWh</td>
+        <td>${formatNumber(row.usage > 0 ? (((row.directSolar + row.batteryDischarge) / row.usage) * 100) : 0, 1)}%</td>
+      </tr>
+    `).join('');
+  }
 }
 
 function updateDayMonthLabel() {
@@ -881,13 +1127,18 @@ function getLookupMapZoom(payload) {
 
 function buildLookupMapUrl(payload, result) {
   const zoom = getLookupMapZoom(payload);
-  const latitude = payload?.request?.latitude;
-  const longitude = payload?.request?.longitude;
+  // Prefer the building center from the Solar API response (always present on success),
+  // then fall back to the geocoded coordinates stored on the request object.
+  const latitude = payload?.raw?.center?.latitude ?? payload?.request?.latitude;
+  const longitude = payload?.raw?.center?.longitude ?? payload?.request?.longitude;
   if (Number.isFinite(latitude) && Number.isFinite(longitude)) {
     return `https://www.google.com/maps?q=${encodeURIComponent(`${latitude},${longitude}`)}&t=k&z=${zoom}&output=embed`;
   }
   const address = result?.address || payload?.summary?.formattedAddress || payload?.request?.address || '';
-  return `https://www.google.com/maps?q=${encodeURIComponent(address || 'Austin, TX')}&t=k&z=${zoom}&output=embed`;
+  if (address) {
+    return `https://www.google.com/maps?q=${encodeURIComponent(address)}&t=k&z=${zoom}&output=embed`;
+  }
+  return 'https://www.google.com/maps?q=Austin%2C%20TX&output=embed';
 }
 
 function syncSystemSizeSliderMax() {
@@ -1114,30 +1365,6 @@ async function loadInstallCostLookup() {
   }
 }
 
-async function loadSampleGoogleRoofData() {
-  try {
-      const response = await fetch('sampledata.json');
-      if (!response.ok) {
-        throw new Error(`Sample roof data request failed with ${response.status}`);
-      }
-
-      const payload = await response.json();
-      googleSolarRawPayload = payload;
-      googleSolarResult = summarizeGoogleSolarResult(payload);
-      syncInstallCostFromGoogleResult();
-      const elements = getGoogleLookupElements();
-      if (elements.addressInput && !elements.addressInput.value) {
-        elements.addressInput.value = payload?.summary?.formattedAddress || payload?.request?.address || '';
-    }
-    setUiError('');
-    elements.status.textContent = 'Loaded local sample roof data. Live lookup will replace it.';
-    renderGoogleLookupResult();
-  } catch (error) {
-    const elements = getGoogleLookupElements();
-    setUiError(error.message || 'Sample roof data could not be loaded.');
-    elements.status.textContent = 'Sample roof data could not be loaded.';
-  }
-}
 
 function interpolateCyclicSeries(hourlySeries, index, intervalsPerHour) {
   const baseIndex = Math.floor(index / intervalsPerHour);
@@ -1484,6 +1711,71 @@ function renderBillChart(yearOne) {
   billChart = new Chart(ctx, { type: 'line', data, options });
 }
 
+function renderGridFlowChart(yearOne) {
+  const ctx = document.getElementById('gridFlowChart');
+  const data = {
+    labels: MONTHS,
+    datasets: [
+      {
+        type: 'line',
+        label: 'Usage',
+        data: yearOne.monthlyRows.map((row) => row.usage),
+        borderColor: '#2563a6',
+        backgroundColor: 'rgba(37, 99, 166, 0.12)',
+        tension: 0.32,
+        borderWidth: 3,
+        pointRadius: 3,
+        fill: false,
+      },
+      {
+        type: 'line',
+        label: 'Import',
+        data: yearOne.monthlyRows.map((row) => row.imported),
+        borderColor: '#8b5e34',
+        backgroundColor: 'rgba(139, 94, 52, 0.12)',
+        tension: 0.32,
+        borderWidth: 3,
+        pointRadius: 3,
+        fill: false,
+      },
+      {
+        type: 'line',
+        label: 'Export',
+        data: yearOne.monthlyRows.map((row) => row.exported),
+        borderColor: '#2e7d58',
+        backgroundColor: 'rgba(46, 125, 88, 0.12)',
+        tension: 0.32,
+        borderWidth: 3,
+        pointRadius: 3,
+        fill: false,
+      },
+    ],
+  };
+
+  const options = {
+    ...CHART_BASE_OPTIONS,
+    interaction: { mode: 'index', intersect: false },
+    scales: {
+      y: {
+        title: { display: true, text: 'kWh' },
+        grid: { color: 'rgba(45, 38, 31, 0.08)' },
+      },
+    },
+    plugins: {
+      legend: { position: 'bottom' },
+    },
+  };
+
+  if (gridFlowChart) {
+    gridFlowChart.data = data;
+    gridFlowChart.options = options;
+    gridFlowChart.update('none');
+    return;
+  }
+
+  gridFlowChart = new Chart(ctx, { type: 'line', data, options });
+}
+
 function renderPaybackChart(tenYear) {
   const ctx = document.getElementById('paybackChart');
   const cumulativeWithoutSolar = [0];
@@ -1672,20 +1964,21 @@ function updateCalculator() {
   try {
     setUiError('');
     syncPowerPlanUi();
+    syncAustinDocs();
     updateValueLabels();
     updateDayMonthLabel();
 
     const inputs = getInputs();
     const yearOne = buildYearModel(inputs, 0);
     const tenYear = buildTenYearModel(inputs);
-    const netInstallCost = tenYear.netInstallCost;
 
-    updateKpis(yearOne, tenYear, netInstallCost);
-    updateTables(yearOne, tenYear, netInstallCost);
-    renderGoogleSegmentTable(inputs.systemSize);
-    renderMonthlyChart(yearOne);
-    renderSizeMappingChart(inputs);
-    renderBillChart(yearOne);
+    updateKpis(yearOne, tenYear);
+      updateTables(yearOne, tenYear);
+      renderGoogleSegmentTable(inputs.systemSize);
+      renderMonthlyChart(yearOne);
+      renderGridFlowChart(yearOne);
+      renderSizeMappingChart(inputs);
+      renderBillChart(yearOne);
     renderDailyChart(inputs);
     renderPaybackChart(tenYear);
   } catch (error) {
@@ -1705,7 +1998,7 @@ function buildCandidateValues(min, max, step) {
 function evaluateNetValue(systemSize, batteryPower) {
   const inputs = getInputsForSystemAndBattery(systemSize, batteryPower);
   const tenYear = buildTenYearModel(inputs);
-  return tenYear.totalSavings - tenYear.netInstallCost;
+  return tenYear.totalSavings - tenYear.totalInstallCost;
 }
 
 function solveBestSystemSize() {
@@ -1765,10 +2058,17 @@ function resetInputs() {
     const input = document.getElementById(fieldId);
     if (input) input.value = value;
   });
+  applyAppModeDefaults();
   updateCalculator();
 }
 
 window.addEventListener('DOMContentLoaded', async () => {
+  // Force-collapse all .doc-details elements on load, overriding browser
+  // state-restoration which can re-open them across page loads.
+  document.querySelectorAll('.doc-details').forEach((el) => {
+    el.open = false;
+  });
+
   document.querySelectorAll('input[type="range"], select').forEach((input) => {
     input.addEventListener('input', updateCalculator);
     input.addEventListener('change', updateCalculator);
@@ -1783,8 +2083,24 @@ window.addEventListener('DOMContentLoaded', async () => {
       lookupGoogleRoof();
     }
   });
+  // Chart / Table view toggles for "Year 1 bills" and "Monthly grid flow".
+  // Each toggle button carries data-chart and data-table attributes that identify
+  // the wrapper element IDs (chartId + "Wrap" and tableId + "Wrap").
+  document.querySelectorAll('.view-toggle-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const chartWrap = document.getElementById(btn.dataset.chart + 'Wrap');
+      const tableWrap = document.getElementById(btn.dataset.table + 'Wrap');
+      if (!chartWrap || !tableWrap) return;
+      const showingChart = !chartWrap.hidden;
+      chartWrap.hidden = showingChart;
+      tableWrap.hidden = !showingChart;
+      btn.setAttribute('aria-pressed', showingChart ? 'false' : 'true');
+      btn.classList.toggle('view-toggle-btn--active', !showingChart);
+    });
+  });
+
+  applyAppModeDefaults();
   await loadInstallCostLookup();
-  await loadSampleGoogleRoofData();
   renderGoogleLookupResult();
   updateCalculator();
 });

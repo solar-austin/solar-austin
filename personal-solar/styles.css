@@ -12,7 +12,7 @@
   --surface: #fdfaf4;
   --success: #2e7d58;
   --shadow: 0 18px 44px rgba(76, 49, 26, 0.08);
-  --radius: 22px;
+  --radius: 11px;
   --font: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
 }
 
@@ -35,22 +35,14 @@ body {
   padding: 28px 22px 48px;
 }
 
-.hero,
 .kpi-card,
 .panel {
   backdrop-filter: blur(10px);
 }
 
 .hero {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 280px;
-  gap: 20px;
-  align-items: end;
-  padding: 28px;
-  border-radius: 28px;
-  background: linear-gradient(135deg, rgba(255, 251, 245, 0.94), rgba(255, 247, 235, 0.82));
-  border: 1px solid var(--panel-border);
-  box-shadow: var(--shadow);
+  padding: 32px 0 24px;
+  background: transparent;
 }
 
 .eyebrow {
@@ -84,7 +76,7 @@ h1 {
 
 .hero-note {
   padding: 18px;
-  border-radius: 20px;
+  border-radius: 10px;
   background: linear-gradient(180deg, rgba(43, 97, 154, 0.92), rgba(26, 64, 107, 0.96));
   color: #fff;
   box-shadow: 0 16px 36px rgba(26, 64, 107, 0.24);
@@ -113,10 +105,6 @@ h1 {
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 16px;
   margin: 18px 0;
-}
-
-.lookup-top {
-  margin: 18px 0 0;
 }
 
 .kpi-card,
@@ -193,17 +181,20 @@ h1 {
 .inputs-panel {
   align-self: start;
   position: sticky;
-  top: 20px;
+  top: 16px;
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+  scrollbar-width: thin;
 }
 
 .input-group + .input-group {
-  margin-top: 22px;
-  padding-top: 22px;
+  margin-top: 16px;
+  padding-top: 16px;
   border-top: 1px solid rgba(76, 64, 52, 0.1);
 }
 
 .input-group h3 {
-  margin-bottom: 14px;
+  margin-bottom: 10px;
   font-size: 0.86rem;
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -215,14 +206,14 @@ h1 {
 }
 
 .field + .field {
-  margin-top: 16px;
+  margin-top: 12px;
 }
 
 .inline-cost-card {
-  margin: 12px 0 16px;
-  padding: 12px 14px;
+  margin: 10px 0 12px;
+  padding: 10px 12px;
   border: 1px solid rgba(76, 64, 52, 0.1);
-  border-radius: 14px;
+  border-radius: 7px;
   background: rgba(255, 250, 242, 0.9);
 }
 
@@ -234,11 +225,55 @@ h1 {
 }
 
 .inline-cost-row + .inline-cost-row {
-  margin-top: 8px;
+  margin-top: 6px;
 }
 
 .inline-cost-row strong {
   color: var(--accent-strong);
+}
+
+#austinRebateInfo {
+  margin: 10px 0 12px;
+  padding: 10px 12px;
+  border: 1px solid rgba(76, 64, 52, 0.1);
+  border-radius: 7px;
+  background: rgba(244, 241, 234, 0.7);
+}
+
+.rebate-info-heading {
+  margin: 0 0 6px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--muted);
+}
+
+.rebate-info-list {
+  margin: 0 0 6px;
+  padding-left: 18px;
+  color: var(--muted);
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+.rebate-info-list li + li {
+  margin-top: 4px;
+}
+
+.rebate-info-link {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.rebate-info-link a {
+  color: var(--accent-strong);
+  text-decoration: none;
+}
+
+.rebate-info-link a:hover {
+  text-decoration: underline;
 }
 
 .field-head {
@@ -258,7 +293,7 @@ input[type="text"],
 .text-input {
   width: 100%;
   border: 1px solid rgba(76, 64, 52, 0.18);
-  border-radius: 12px;
+  border-radius: 6px;
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(249, 243, 233, 0.96));
   color: var(--text);
   padding: 12px 14px;
@@ -283,7 +318,7 @@ input[type="range"] {
   min-width: 0;
   appearance: none;
   border: 1px solid rgba(76, 64, 52, 0.18);
-  border-radius: 12px;
+  border-radius: 6px;
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(249, 243, 233, 0.96));
   color: var(--text);
   padding: 12px 42px 12px 14px;
@@ -312,7 +347,7 @@ input[type="range"] {
   border: 1px solid rgba(76, 64, 52, 0.18);
   background: rgba(255, 255, 255, 0.72);
   color: var(--text);
-  border-radius: 999px;
+  border-radius: 8px;
   padding: 10px 14px;
   font-weight: 600;
   cursor: pointer;
@@ -327,11 +362,22 @@ input[type="range"] {
   opacity: 0.55;
 }
 
+/* View toggle: highlight the active state to show which view is visible */
+.view-toggle-btn--active {
+  background: rgba(204, 109, 28, 0.12);
+  border-color: rgba(204, 109, 28, 0.35);
+  color: var(--accent-strong);
+}
+
+.view-toggle-btn--active:hover {
+  background: rgba(204, 109, 28, 0.2);
+}
+
 .lookup-card {
   margin-bottom: 22px;
   padding: 16px;
   border: 1px solid rgba(76, 64, 52, 0.1);
-  border-radius: 18px;
+  border-radius: 9px;
   background: linear-gradient(180deg, rgba(255, 250, 242, 0.96), rgba(248, 242, 232, 0.9));
 }
 
@@ -374,7 +420,7 @@ input[type="range"] {
 .lookup-badge {
   align-self: start;
   padding: 6px 10px;
-  border-radius: 999px;
+  border-radius: 8px;
   background: rgba(46, 125, 88, 0.12);
   color: var(--success);
   font-size: 0.78rem;
@@ -411,6 +457,17 @@ input[type="range"] {
 
 .segment-table-scroll {
   overflow-x: auto;
+}
+
+/* Match table wrapper height to its paired chart so toggling causes no layout shift */
+#monthlyBillsTableWrap {
+  height: 340px;
+  overflow-y: auto;
+}
+
+#monthlyFlowTableWrap {
+  height: 280px;
+  overflow-y: auto;
 }
 
 .segment-panel .panel-head p {
@@ -460,7 +517,7 @@ input[type="range"] {
 .lookup-map-frame {
   height: 100%;
   min-height: 320px;
-  border-radius: 18px;
+  border-radius: 9px;
   overflow: hidden;
   border: 1px solid rgba(76, 64, 52, 0.1);
   background: rgba(255, 255, 255, 0.66);
@@ -518,6 +575,26 @@ input[type="range"] {
   gap: 18px;
 }
 
+.kpi-grid-compact {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+}
+
+.kpi-grid-compact .kpi-card {
+  padding: 14px 16px;
+}
+
+.kpi-grid-compact .kpi-value {
+  margin-top: 8px;
+  font-size: clamp(1.45rem, 2vw, 2rem);
+}
+
+.kpi-grid-compact .kpi-foot {
+  margin-top: 8px;
+  font-size: 0.86rem;
+}
+
 .summary-table {
   width: 100%;
   border-collapse: collapse;
@@ -554,15 +631,105 @@ input[type="range"] {
   text-align: right;
 }
 
+/* ── Monthly Bills table enhancements ─────────────────────────────────── */
+
+/* Header row: more visually distinct */
+#monthlyBillsTable thead tr {
+  border-bottom: 2px solid rgba(37, 99, 166, 0.18);
+}
+
+#monthlyBillsTable thead th {
+  color: var(--text);
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+
+/* Alternating row shading */
+#monthlyBillsTable tbody tr {
+  transition: background 0.12s ease;
+}
+
+#monthlyBillsTable tbody .bills-row-alt {
+  background: rgba(37, 99, 166, 0.04);
+}
+
+#monthlyBillsTable tbody tr:hover {
+  background: rgba(37, 99, 166, 0.08);
+}
+
+/* "With solar" column — subtle teal/blue tint */
+#monthlyBillsTable td.cell-with-solar {
+  color: #1a5f8a;
+  font-weight: 700;
+}
+
+/* "Difference" column base */
+#monthlyBillsTable td.cell-diff {
+  font-weight: 700;
+}
+
+/* Savings: positive difference — green */
+#monthlyBillsTable td.diff-savings {
+  color: #1e6e47;
+}
+
+/* Cost: negative difference — red/amber */
+#monthlyBillsTable td.diff-cost {
+  color: #9b2c1a;
+}
+
 .callout {
   background: linear-gradient(135deg, rgba(255, 252, 247, 0.92), rgba(244, 238, 228, 0.82));
 }
 
+.doc-details summary {
+  cursor: pointer;
+  font-weight: 700;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  user-select: none;
+}
+
+.doc-details summary::-webkit-details-marker {
+  display: none;
+}
+
+.doc-details summary::before {
+  content: '▶';
+  font-size: 0.65em;
+  transition: transform 0.2s ease;
+  flex-shrink: 0;
+}
+
+.doc-details[open] summary::before {
+  transform: rotate(90deg);
+}
+
+.doc-body {
+  margin-top: 14px;
+}
+
+.doc-list {
+  margin: 12px 0;
+  padding-left: 20px;
+  color: var(--muted);
+}
+
+.doc-list li + li {
+  margin-top: 6px;
+}
+
 @media (max-width: 1100px) {
   .kpi-grid,
+  .kpi-grid-compact,
   .layout,
-  .two-up,
-  .hero {
+  .two-up {
     grid-template-columns: 1fr;
   }
 
@@ -581,10 +748,9 @@ input[type="range"] {
   }
 
   .panel,
-  .hero,
   .kpi-card {
     padding: 16px;
-    border-radius: 18px;
+    border-radius: 9px;
   }
 
   .panel-head,
@@ -603,6 +769,10 @@ input[type="range"] {
   }
 
   .chart-wrap {
+    height: 280px;
+  }
+
+  #monthlyBillsTableWrap {
     height: 280px;
   }
 }

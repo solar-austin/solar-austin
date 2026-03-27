@@ -11,6 +11,9 @@
 <div class="wrap">
   <header>
     <h1>Austin Energy Power Simulator</h1>
+    <nav>
+      <a class="nav-link" href="/personal-solar/?mode=austin-energy">Personal Solar Calculator</a>
+    </nav>
   </header>
 
   <div class="kpi-bar">
@@ -552,8 +555,9 @@
 
       <h4>2b. Import allowance in the reliability model</h4>
       <p>The model includes an <strong>Import Allowance</strong> input to represent outside power that Austin Energy can plausibly rely on in stressed hours. This is not treated as owned generation. It is a capped market-support layer that sits after local generation, battery discharge, and gas peakers. In the charts, it appears separately from Austin Energy resources so imported support is visually distinct from owned or contracted supply.</p>
-      <p>The current default is <strong>700 MW</strong>. This should be read as an <em>effective stressed-hour import allowance</em>, not as a literal transmission rating. In reality, Austin's usable outside support depends on both transmission into the load zone and whether ERCOT has power available to deliver during a tight hour. The model compresses those effects into one editable allowance so the user can test how much outside support is assumed to be dependable.</p>
-      <div class="formula-block">
+        <p>The current default is <strong>700 MW</strong>. This should be read as an <em>effective stressed-hour import allowance</em>, not as a literal transmission rating. In reality, Austin's usable outside support depends on both transmission into the load zone and whether ERCOT has power available to deliver during a tight hour. The model compresses those effects into one editable allowance so the user can test how much outside support is assumed to be dependable.</p>
+        <p>The <strong>700 MW</strong> default is a calibrated planning placeholder rather than a published Austin Energy transfer limit. It was chosen because Austin Energy and related city materials point to the same general scale: a recent Austin transmission discussion described roughly a <strong>700 MW local generation gap</strong> after Decker steam-unit retirements, while the Round II portfolio materials treated a <strong>+250 MW import-capacity increase</strong> as a meaningful but incremental reliability improvement in portfolios 14-16. In other words, the model uses 700 MW as a reasonable stressed-hour outside-support baseline that is large enough to matter, but still small enough that a further 250 MW increase changes outcomes. Sources: <a href="https://bandc.crccheck.com/electric-utility-commission/468531-item-12-presentation-transmission-discussion/" target="_blank" rel="noopener noreferrer">EUC transmission discussion</a> and <a href="https://services.austintexas.gov/edims/document.cfm?id=439557" target="_blank" rel="noopener noreferrer">Round II Modeling Results</a>.</p>
+        <div class="formula-block">
         <div class="formula-line"><span class="formula-label">Import dispatch</span><span class="formula-math">\( \mathrm{Imports}(h) = \min(\mathrm{Import\ Allowance}, \mathrm{Shortfall\ After\ Local\ Resources}(h)) \)</span></div>
         <div class="formula-line"><span class="formula-label">Residual risk</span><span class="formula-math">\( \mathrm{Residual\ Shortfall}(h) = \max(0, \mathrm{Load}(h) - \mathrm{Local\ Supply}(h) - \mathrm{Imports}(h)) \)</span></div>
       </div>

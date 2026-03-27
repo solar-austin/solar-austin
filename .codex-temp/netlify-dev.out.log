@@ -45,3 +45,7 @@ Request from ::1: GET /.netlify/functions/solar-insights?address=27%20Chapel%20S
 Response with status 200 in 342 ms.
 ⬥ Reloading function solar-insights...
 ⬥ Reloaded function solar-insights
+Request from ::1: GET /.netlify/functions/solar-insights?address=2307%20hayfield%20sq%2078660
+Response with status 200 in 461 ms.
+Request from ::1: GET /.netlify/functions/solar-insights?address=19624%20Cheyenne%20Valley%20Dr
+Response with status 200 in 456 ms.
