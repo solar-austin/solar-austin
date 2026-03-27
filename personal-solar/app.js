@@ -1049,25 +1049,31 @@ function updateTables(yearOne, tenYear) {
 
   const monthlyBillsTable = document.getElementById('monthlyBillsTable');
   if (monthlyBillsTable) {
-    monthlyBillsTable.querySelector('tbody').innerHTML = yearOne.monthlyRows.map((row, i) => {
-      const diffClass = row.billSavings > 0 ? 'diff-savings' : row.billSavings < 0 ? 'diff-cost' : '';
-      const rowClass = i % 2 === 1 ? ' class="bills-row-alt"' : '';
-      const tdDiffClass = diffClass ? `cell-diff ${diffClass}` : 'cell-diff';
-      return `<tr${rowClass}><td>${row.month}</td><td>${formatCurrency(row.billWithoutSolar)}</td><td class="cell-with-solar">${formatCurrency(row.billWithSolar)}</td><td class="${tdDiffClass}">${formatCurrency(row.billSavings)}</td></tr>`;
+    const billRows = yearOne.monthlyRows;
+    const withoutCells = billRows.map(r => `<td>${formatCurrency(r.billWithoutSolar)}</td>`).join('');
+    const withCells    = billRows.map(r => `<td class="cell-with-solar">${formatCurrency(r.billWithSolar)}</td>`).join('');
+    const diffCells    = billRows.map(r => {
+      const cls = r.billSavings > 0 ? 'cell-diff diff-savings' : r.billSavings < 0 ? 'cell-diff diff-cost' : 'cell-diff';
+      return `<td class="${cls}">${formatCurrency(r.billSavings)}</td>`;
     }).join('');
+    monthlyBillsTable.querySelector('tbody').innerHTML =
+      `<tr><th>Without solar</th>${withoutCells}</tr>` +
+      `<tr><th>With solar</th>${withCells}</tr>` +
+      `<tr><th>Difference</th>${diffCells}</tr>`;
   }
 
   const monthlyFlowTable = document.getElementById('monthlyFlowTable');
   if (monthlyFlowTable) {
-    monthlyFlowTable.querySelector('tbody').innerHTML = yearOne.monthlyRows.map((row) => `
-      <tr>
-        <td>${row.month}</td>
-        <td>${formatNumber(row.usage, 0)} kWh</td>
-        <td>${formatNumber(row.imported, 0)} kWh</td>
-        <td>${formatNumber(row.exported, 0)} kWh</td>
-        <td>${formatNumber(row.usage > 0 ? (((row.directSolar + row.batteryDischarge) / row.usage) * 100) : 0, 1)}%</td>
-      </tr>
-    `).join('');
+    const flowRows = yearOne.monthlyRows;
+    const usageCells   = flowRows.map(r => `<td>${formatNumber(r.usage, 0)} kWh</td>`).join('');
+    const importCells  = flowRows.map(r => `<td>${formatNumber(r.imported, 0)} kWh</td>`).join('');
+    const exportCells  = flowRows.map(r => `<td>${formatNumber(r.exported, 0)} kWh</td>`).join('');
+    const solarCells   = flowRows.map(r => `<td>${formatNumber(r.usage > 0 ? (((r.directSolar + r.batteryDischarge) / r.usage) * 100) : 0, 1)}%</td>`).join('');
+    monthlyFlowTable.querySelector('tbody').innerHTML =
+      `<tr><th>Usage</th>${usageCells}</tr>` +
+      `<tr><th>Import</th>${importCells}</tr>` +
+      `<tr><th>Export</th>${exportCells}</tr>` +
+      `<tr><th>Solar used</th>${solarCells}</tr>`;
   }
 }
 
@@ -1365,6 +1371,27 @@ async function loadInstallCostLookup() {
   }
 }
 
+async function loadSampleGoogleRoofData() {
+  try {
+    const response = await fetch('sampledata.json');
+    if (!response.ok) {
+      throw new Error(`Sample roof data request failed with ${response.status}`);
+    }
+    const payload = await response.json();
+    googleSolarRawPayload = payload;
+    googleSolarResult = summarizeGoogleSolarResult(payload);
+    syncInstallCostFromGoogleResult();
+    const elements = getGoogleLookupElements();
+    if (elements.addressInput && !elements.addressInput.value) {
+      elements.addressInput.value = payload?.summary?.formattedAddress || payload?.request?.address || '';
+    }
+    setUiError('');
+    renderGoogleLookupResult();
+  } catch (error) {
+    const elements = getGoogleLookupElements();
+    setUiError(error.message || 'Sample roof data could not be loaded.');
+  }
+}
 
 function interpolateCyclicSeries(hourlySeries, index, intervalsPerHour) {
   const baseIndex = Math.floor(index / intervalsPerHour);
@@ -2101,6 +2128,7 @@ window.addEventListener('DOMContentLoaded', async () => {
 
   applyAppModeDefaults();
   await loadInstallCostLookup();
+  await loadSampleGoogleRoofData();
   renderGoogleLookupResult();
   updateCalculator();
 });
