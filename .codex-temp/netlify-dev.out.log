@@ -1,0 +1,56 @@
+⬥ Injecting environment variable values for all scopes
+⬥ Injected .env file env vars: GOOGLE_SOLAR_API_KEY
+⬥ No app server detected. Using simple static server
+⬥ Running static server from "solar-austin"
+⬥ Setting up local dev server
+
+⬥ Static server listening to 3999
+⬥ Loaded function solar-insights
+
+   ╭─────────────────────── ⬥  ────────────────────────╮
+   │                                                   │
+   │   Local dev server ready: http://localhost:8888   │
+   │                                                   │
+   ╰───────────────────────────────────────────────────╯
+
+Request from ::ffff:127.0.0.1: GET /.netlify/functions/solar-insights?address=1600+Amphitheatre+Parkway,+Mountain+View,+CA
+Response with status 200 in 454 ms.
+Request from ::1: GET /.netlify/functions/solar-insights?address=19624%20Cheyenne%20Valley%20Dr
+Response with status 200 in 237 ms.
+Request from ::1: GET /.netlify/functions/solar-insights?address=19624%20Cheyenne%20Valley%20Dr
+Response with status 200 in 322 ms.
+Request from ::1: GET /.netlify/functions/solar-insights?address=19624%20Cheyenne%20Valley%20Dr
+Response with status 200 in 259 ms.
+Request from ::ffff:127.0.0.1: GET /.netlify/functions/solar-insights?address=1600+Amphitheatre+Parkway,+Mountain+View,+CA
+Request from ::ffff:127.0.0.1: GET /.netlify/functions/solar-insights?address=1600+Amphitheatre+Parkway,+Mountain+View,+CA
+Response with status 200 in 420 ms.
+Response with status 200 in 477 ms.
+Request from ::1: GET /.netlify/functions/solar-insights?address=19624%20Cheyenne%20Valley%20Dr
+Response with status 200 in 284 ms.
+Request from ::1: GET /.netlify/functions/solar-insights?address=19624%20Cheyenne%20Valley%20Dr
+Response with status 200 in 360 ms.
+Request from ::1: GET /.netlify/functions/solar-insights?address=19624%20Cheyenne%20Valley%20Dr%2C%20Round%20Rock%2C%20TX%2078664%2C%20USA
+Response with status 200 in 406 ms.
+Request from ::1: GET /.netlify/functions/solar-insights?address=2307%20hayfield%20square%2078600
+Response with status 200 in 396 ms.
+Request from ::1: GET /.netlify/functions/solar-insights?address=19624%20Cheyenne%20Valley%20Dr%2C%20Round%20Rock%2C%20TX%2078664%2C%20USA
+Response with status 200 in 268 ms.
+Request from ::1: GET /.netlify/functions/solar-insights?address=19624%20Cheyenne%20Valley%20Dr%2C%20Round%20Rock%2C%20TX%2078664%2C%20USA
+Response with status 200 in 376 ms.
+Request from ::1: GET /.netlify/functions/solar-insights?address=19624%20Cheyenne%20Valley%20Dr%2C%20Round%20Rock%2C%20TX%2078664%2C%20USA
+Response with status 200 in 407 ms.
+Request from ::1: GET /.netlify/functions/solar-insights?address=2307%20hayfield%20square%2078660
+Response with status 200 in 446 ms.
+Request from ::1: GET /.netlify/functions/solar-insights?address=27%20Chapel%20St%2C%20Augusta%2C%20ME%2004330
+Response with status 200 in 342 ms.
+⬥ Reloading function solar-insights...
+⬥ Reloaded function solar-insights
+Request from ::1: GET /.netlify/functions/solar-insights?address=2307%20hayfield%20sq%2078660
+Response with status 200 in 461 ms.
+Request from ::1: GET /.netlify/functions/solar-insights?address=19624%20Cheyenne%20Valley%20Dr
+Response with status 200 in 456 ms.
+⬥ Reloading function solar-insights...
+⬥ Reloaded function solar-insights
+⬥ Reloading redirect rules from [ 'netlify.toml' ]
+⬥ Reloading headers files from [ 'netlify.toml' ]
+⬥ Removed function solar-insights

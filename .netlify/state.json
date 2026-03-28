@@ -1,0 +1,20 @@
+{
+	"geolocation": {
+		"data": {
+			"city": "Round Rock",
+			"country": {
+				"code": "US",
+				"name": "United States"
+			},
+			"subdivision": {
+				"code": "TX",
+				"name": "Texas"
+			},
+			"timezone": "America/Chicago",
+			"latitude": 30.5154,
+			"longitude": -97.6689,
+			"postalCode": "78664"
+		},
+		"timestamp": 1774678854384
+	}
+}
