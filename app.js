@@ -198,8 +198,7 @@ const MIX_COMBINED_KEYS = ['existingPower', 'newGeneration', 'gap'];
  */
 const AUSTIN_LATITUDE_DEG = 30.2672;
 const AUSTIN_LONGITUDE_DEG = -97.7431;
-const SOLAR_PROFILE_EXPONENT = 0.78;
-const UTILITY_SOLAR_ASSUMED_DC_AC_RATIO = 1.3;
+const SOLAR_PROFILE_EXPONENT = 0.62;
 const REPRESENTATIVE_MONTH_DAY_OF_YEAR = [15, 46, 74, 105, 135, 166, 196, 227, 258, 288, 319, 349];
 
 function getSolarShapeFactor(dayOfYear, hourOfDay, latitudeDeg = AUSTIN_LATITUDE_DEG, longitudeDeg = AUSTIN_LONGITUDE_DEG, referenceLongitudeDeg = AUSTIN_LONGITUDE_DEG) {
@@ -251,16 +250,8 @@ function buildCapacityWeightedSolarProfile(dayOfYear, sites, referenceLongitudeD
   });
 }
 
-function applyUtilitySolarClipping(profile, dcAcRatio = UTILITY_SOLAR_ASSUMED_DC_AC_RATIO) {
-  const maxVal = Math.max(...profile, 0);
-  if (!Number.isFinite(maxVal) || maxVal <= 0) return profile.map(() => 0);
-  return profile.map((value) => Math.min(1, (value / maxVal) * dcAcRatio));
-}
-
 const AUGUST_REPRESENTATIVE_DAY_OF_YEAR = REPRESENTATIVE_MONTH_DAY_OF_YEAR[7];
-const AE_UTILITY_SOLAR_HOURLY_PROFILE = applyUtilitySolarClipping(
-  buildCapacityWeightedSolarProfile(AUGUST_REPRESENTATIVE_DAY_OF_YEAR, AE_UTILITY_SOLAR_SITES),
-);
+const AE_UTILITY_SOLAR_HOURLY_PROFILE = buildCapacityWeightedSolarProfile(AUGUST_REPRESENTATIVE_DAY_OF_YEAR, AE_UTILITY_SOLAR_SITES);
 
 function buildAustinMonthlySolarProfile() {
   const monthEnergyProxy = REPRESENTATIVE_MONTH_DAY_OF_YEAR.map((dayOfYear) => (
@@ -777,7 +768,7 @@ function update() {
   const marketShape2035 = estimateMarketShapeData(twh35, total2035);
   const totCostM = runFinancials(twh35, tx, total2035, batt, distBatt, marketShape2035);
   const buildoutRows = [];
-  const buildoutTotals = { windCost: 0, solarCost: 0, geoCost: 0, battCost: 0, priorCost: 0, newCost: 0, totalCost: 0, marketCost: 0, allInCost: 0 };
+  const buildoutTotals = { windMw: 0, solarMw: 0, distSolarMw: 0, geoMw: 0, battMw: 0, distBattMw: 0, newMw: 0, totalMw: 0 };
   const battAnnualMw = Math.max(0, batt - DEFAULT_INPUTS.p_batt) / BUILD_YRS_TOTAL;
   const distBattAnnualMw = Math.max(0, distBatt - DEFAULT_INPUTS.p_dist_batt) / BUILD_YRS_TOTAL;
 
@@ -790,69 +781,37 @@ function update() {
     const geoAdd = buildActive ? geoAnnualMw : 0;
     const battAdd = buildActive ? battAnnualMw : 0;
     const distBattAdd = buildActive ? distBattAnnualMw : 0;
-    const totalAdded = windAdd + solarAdd + distSolarAdd + geoAdd + battAdd + distBattAdd;
     const completedBuildYears = Math.max(0, i - 1);
-    const battYearMw = DEFAULT_INPUTS.p_batt + (battAnnualMw * completedBuildYears);
-    const distBattYearMw = DEFAULT_INPUTS.p_dist_batt + (distBattAnnualMw * completedBuildYears);
-    const yearTwh = {
-      nuke: data.nuke[i],
-      biomass: data.biomass[i],
-      gasBase: data.gasBase[i],
-      gasPeak: data.gasPeak[i],
-      coal: data.coal[i],
-      ee: data.ee[i],
-      dr: data.dr[i],
-      exWind: data.exWind[i],
-      exSolar: data.exSolar[i],
-      geo: data.geo[i],
-      newWind: data.newWind[i],
-      newSolar: data.newSolar[i],
-      distSolar: data.distSolar[i],
-      gap: data.gap[i],
-    };
-    const windCost = getBuildoutCostTwh(windAdd, 'newWind', i, { cf: CF.wind });
-    const solarCost = getBuildoutCostTwh(solarAdd, 'newSolar', i, { cf: CF.solar, applySolarDegradation: true });
-    const distSolarCost = getBuildoutCostTwh(distSolarAdd, 'distSolar', i, { cf: CF.distSolar });
-    const geoCost = getBuildoutCostTwh(geoAdd, 'geo', i, { cf: CF.geo });
-    const battCost = getBuildoutCostTwh(battAdd, 'batt', i, { isBattery: true });
-    const distBattCost = getBuildoutCostTwh(distBattAdd, 'distBatt', i, { isBattery: true });
-    const newCost = windCost + solarCost + distSolarCost + geoCost + battCost + distBattCost;
-    const priorWindCost = getBuildoutCostTwh(Math.max(0, completedBuildYears * buildPlan.windAnnualMw), 'newWind', i, { cf: CF.wind });
-    const priorSolarCost = getBuildoutCostTwh(Math.max(0, completedBuildYears * buildPlan.solarAnnualMw), 'newSolar', i, { cf: CF.solar, applySolarDegradation: true });
-    const priorDistSolarCost = getBuildoutCostTwh(Math.max(0, completedBuildYears * buildPlan.distSolarAnnualMw), 'distSolar', i, { cf: CF.distSolar });
-    const priorGeoCost = getBuildoutCostTwh(Math.max(0, completedBuildYears * geoAnnualMw), 'geo', i, { cf: CF.geo });
-    const priorBattCost = getBuildoutCostTwh(Math.max(0, battAnnualMw * completedBuildYears), 'batt', i, { isBattery: true });
-    const priorDistBattCost = getBuildoutCostTwh(Math.max(0, distBattAnnualMw * completedBuildYears), 'distBatt', i, { isBattery: true });
-    const priorCost = priorWindCost + priorSolarCost + priorDistSolarCost + priorGeoCost + priorBattCost + priorDistBattCost;
-    const totalCost = priorCost + newCost;
-    const marketShapeYear = estimateMarketShapeData(yearTwh, data.load[i]);
-    const deficitCost = ((marketShapeYear.gapTwh ?? 0) * MWH_PER_TWH * ((marketShapeYear.importPrice ?? 0) + getResourceTcos('gap', tx))) / DOLLARS_PER_MILLION;
-    const surplusRevenue = ((marketShapeYear.surplusTwh ?? 0) * MWH_PER_TWH * (marketShapeYear.exportPrice ?? 0)) / DOLLARS_PER_MILLION;
-    const marketCost = deficitCost - surplusRevenue;
-    const allInCost = totalCost + marketCost;
+    const priorWindMw = Math.max(0, completedBuildYears * buildPlan.windAnnualMw);
+    const priorSolarMw = Math.max(0, completedBuildYears * buildPlan.solarAnnualMw);
+    const priorDistSolarMw = Math.max(0, completedBuildYears * buildPlan.distSolarAnnualMw);
+    const priorGeoMw = Math.max(0, completedBuildYears * geoAnnualMw);
+    const priorBattMw = Math.max(0, battAnnualMw * completedBuildYears);
+    const priorDistBattMw = Math.max(0, distBattAnnualMw * completedBuildYears);
+    const priorMw = priorWindMw + priorSolarMw + priorDistSolarMw + priorGeoMw + priorBattMw + priorDistBattMw;
+    const newMw = windAdd + solarAdd + distSolarAdd + geoAdd + battAdd + distBattAdd;
+    const totalMw = priorMw + newMw;
 
     buildoutRows.push({
       year,
-      windCost,
-      solarCost,
-      geoCost,
-      battCost,
-      priorCost,
-      newCost,
-      totalCost,
-      marketCost,
-      allInCost,
+      windMw: windAdd,
+      solarMw: solarAdd,
+      distSolarMw: distSolarAdd,
+      geoMw: geoAdd,
+      battMw: battAdd,
+      distBattMw: distBattAdd,
+      newMw,
+      totalMw,
     });
 
-    buildoutTotals.windCost += windCost;
-    buildoutTotals.solarCost += solarCost;
-    buildoutTotals.geoCost += geoCost;
-    buildoutTotals.battCost += battCost;
-    buildoutTotals.priorCost += priorCost;
-    buildoutTotals.newCost += newCost;
-    buildoutTotals.totalCost += totalCost;
-    buildoutTotals.marketCost += marketCost;
-    buildoutTotals.allInCost += allInCost;
+    buildoutTotals.windMw += windAdd;
+    buildoutTotals.solarMw += solarAdd;
+    buildoutTotals.distSolarMw += distSolarAdd;
+    buildoutTotals.geoMw += geoAdd;
+    buildoutTotals.battMw += battAdd;
+    buildoutTotals.distBattMw += distBattAdd;
+    buildoutTotals.newMw += newMw;
+    buildoutTotals.totalMw = totalMw;
   }
   renderBuildoutTable(buildoutRows, buildoutTotals);
   const rateCents = total2035 > 0 ? (totCostM / total2035 / 10) : 0;
@@ -1019,15 +978,14 @@ function renderBuildoutTable(rows, totals) {
   if (body) {
     body.innerHTML = rows.map((row) => `<tr>
       <td>${row.year}</td>
-      <td>${formatCostCell(row.windCost)}</td>
-      <td>${formatCostCell(row.solarCost)}</td>
-      <td>${formatCostCell(row.geoCost)}</td>
-      <td>${formatCostCell(row.battCost)}</td>
-      <td>${formatCostCell(row.priorCost)}</td>
-      <td>${formatCostCell(row.newCost)}</td>
-      <td>${formatCostCell(row.totalCost)}</td>
-      <td>${formatCostCell(row.marketCost)}</td>
-      <td>${formatCostCell(row.allInCost)}</td>
+      <td>${formatBuildMw(row.windMw)}</td>
+      <td>${formatBuildMw(row.solarMw)}</td>
+      <td>${formatBuildMw(row.distSolarMw)}</td>
+      <td>${formatBuildMw(row.geoMw)}</td>
+      <td>${formatBuildMw(row.battMw)}</td>
+      <td>${formatBuildMw(row.distBattMw)}</td>
+      <td>${formatBuildMw(row.newMw)}</td>
+      <td>${formatBuildMw(row.totalMw)}</td>
     </tr>`).join('');
   }
 
@@ -1041,15 +999,14 @@ function renderBuildoutTable(rows, totals) {
     if (el) el.innerHTML = value;
   };
 
-  setHtml('b_wind_total', formatCostCell(totals.windCost));
-  setHtml('b_solar_total', formatCostCell(totals.solarCost));
-  setHtml('b_geo_total', formatCostCell(totals.geoCost));
-  setHtml('b_batt_total', formatCostCell(totals.battCost));
-  setHtml('b_prior_cost_total', formatCostCell(totals.priorCost));
-  setHtml('b_new_cost_total', formatCostCell(totals.newCost));
-  setHtml('b_cost_total', formatCostCell(totals.totalCost));
-  setHtml('b_market_cost_total', formatCostCell(totals.marketCost));
-  setHtml('b_all_in_total', formatCostCell(totals.allInCost));
+  setHtml('b_wind_total', formatBuildMw(totals.windMw));
+  setHtml('b_solar_total', formatBuildMw(totals.solarMw));
+  setHtml('b_dist_solar_total', formatBuildMw(totals.distSolarMw));
+  setHtml('b_geo_total', formatBuildMw(totals.geoMw));
+  setHtml('b_batt_total', formatBuildMw(totals.battMw));
+  setHtml('b_dist_batt_total', formatBuildMw(totals.distBattMw));
+  setHtml('b_new_cost_total', formatBuildMw(totals.newMw));
+  setHtml('b_cost_total', formatBuildMw(totals.totalMw));
 }
 
 function estimateMarketShapeData(yearTwh, loadTwh) {

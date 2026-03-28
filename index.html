@@ -10,11 +10,7 @@
 
 <div class="wrap">
   <header>
-    <h1>Austin Energy Power Simulator</h1>
-    <nav>
-      <a class="nav-link" href="/personal-solar/?mode=austin-energy">Personal Solar Calculator</a>
-    </nav>
-  </header>
+    </header>
 
   <div class="kpi-bar">
     <div class="kpi">
@@ -268,9 +264,9 @@
               <option value="scale-with-growth-zero-emissions">Scale with growth (zero emissions)</option>
           </select>
           <div class="scenario-action-desc" id="scenario_action_desc">Auto-scales new clean resources and storage to meet the selected peak reliability target.</div>
-          <button class="btn-solve scenario-apply-btn has-tooltip" onclick="applyScenarioAction()" title="Apply the selected scenario action to the current slider state.">Apply</button>
+            <button class="btn-solve scenario-apply-btn" onclick="applyScenarioAction()">Apply</button>
+          </div>
         </div>
-      </div>
     </div>
 
     <div>
@@ -348,20 +344,19 @@
       </table>
     </div>
     <div class="card">
-      <h3 class="has-tooltip" title="Year-by-year additions needed to reach the selected 2035 targets, plus the annualized cost of prior additions, new additions made in that year, and any remaining deficit power. This table excludes the legacy fleet and focuses only on the buildout itself.">Annual Buildout &amp; Cost Split</h3>
+      <h3 class="has-tooltip" title="Year-by-year additions needed to reach the selected 2035 targets, shown in MW rather than annualized dollars. This table excludes the legacy fleet and focuses only on the buildout program itself.">Annual Buildout (MW)</h3>
       <table class="fin-table buildout-table">
         <thead>
           <tr>
-            <th class="buildout-year"><span class="has-tooltip" title="Planning year for the annual buildout and cost estimates below. Each row shows what the buildout program looks like in that year, separate from the legacy fleet.">Year</span></th>
-            <th><span class="has-tooltip" title="Estimated annualized landed cost of the utility wind added in that year. This is not the full upfront construction bill; it is the model's yearly cost estimate for the new utility wind tranche added in that row's year.">Utility Wind</span></th>
-            <th><span class="has-tooltip" title="Estimated annualized landed cost of the utility solar added in that year. In this model, large upfront project cost is treated as spread over the life of the resource rather than charged all at once in the build year.">Utility Solar</span></th>
-            <th><span class="has-tooltip" title="Estimated annualized landed cost of the geothermal added in that year. Like the other buildout columns, this reflects a yearly cost view rather than a one-time upfront capital payment.">Geo</span></th>
-            <th><span class="has-tooltip" title="Estimated annualized cost of the utility-scale battery added in that year. Battery cost here is treated as a yearly capacity-style cost for the new storage added in that row's year.">Utility Battery</span></th>
-            <th><span class="has-tooltip" title="Estimated annualized cost of buildout resources added in earlier years and still online in this year. This lets you see how prior build decisions continue to carry cost forward over time.">Prior Additions Cost</span></th>
-            <th><span class="has-tooltip" title="Estimated annualized cost of the new buildout resources added in this specific year only. This is the cost of the current year's new tranche, separate from earlier additions.">This Year's Additions Cost</span></th>
-            <th><span class="has-tooltip" title="Prior additions cost plus this year's additions cost. This total excludes the legacy fleet and is meant to show only the annualized cost of the buildout program itself.">Total Buildout Cost</span></th>
-            <th><span class="has-tooltip" title="Annual gap purchases minus revenue from any surplus energy sold at the modeled ERCOT Austin load-zone market price for each month-hour cell. Positive values mean the system is a net buyer from the market; negative values mean surplus sales more than offset purchases.">Net Market Cost</span></th>
-            <th><span class="has-tooltip" title="Total buildout cost plus net market cost for that year. This is the combined annualized cost impact of the buildout program and any net market purchases or sales.">Buildout + Market</span></th>
+            <th class="buildout-year"><span class="has-tooltip" title="Planning year for the annual buildout estimates below. Each row shows what the buildout program looks like in that year, separate from the legacy fleet.">Year</span></th>
+            <th><span class="has-tooltip" title="New utility wind MW added in that year.">Utility Wind</span></th>
+            <th><span class="has-tooltip" title="New utility solar MW added in that year.">Utility Solar</span></th>
+            <th><span class="has-tooltip" title="New local solar MW added in that year.">Local Solar</span></th>
+            <th><span class="has-tooltip" title="New geothermal MW added in that year.">Geo</span></th>
+            <th><span class="has-tooltip" title="New utility-scale battery MW added in that year.">Utility Battery</span></th>
+            <th><span class="has-tooltip" title="New local battery MW added in that year.">Local Battery</span></th>
+            <th><span class="has-tooltip" title="Total MW added in this specific year only.">This Year's Additions MW</span></th>
+            <th><span class="has-tooltip" title="Total buildout MW online by that year, excluding the legacy fleet.">Cumulative Buildout MW</span></th>
           </tr>
         </thead>
         <tbody id="buildoutBody"></tbody>
@@ -370,17 +365,16 @@
             <td>TOTAL</td>
             <td id="b_wind_total">--</td>
             <td id="b_solar_total">--</td>
+            <td id="b_dist_solar_total">--</td>
             <td id="b_geo_total">--</td>
             <td id="b_batt_total">--</td>
-            <td id="b_prior_cost_total">--</td>
+            <td id="b_dist_batt_total">--</td>
             <td id="b_new_cost_total">--</td>
             <td id="b_cost_total">--</td>
-            <td id="b_market_cost_total">--</td>
-            <td id="b_all_in_total">--</td>
           </tr>
         </tfoot>
       </table>
-      <p class="table-note">These dollar amounts are estimated yearly costs using levelized cost assumptions, meaning the model spreads each resource's upfront project cost over its life instead of charging it all in the build year. In this model, landed cost = base levelized cost + TCOS. This table excludes the legacy fleet and shows only the buildout: earlier additions stay in the prior-cost column, new resources added in each year appear in that year's additions-cost column, and net market cost reflects annual gap purchases minus revenue from any surplus energy sold through the ERCOT Austin load-zone month-by-hour price matrix.</p>
+      <p class="table-note">This table shows the year-by-year buildout program in MW. It excludes the legacy fleet and tracks only added resources, showing what is added in each year and the cumulative buildout online by that point.</p>
     </div>
   </div>
   <details class="card assumptions-expand">
@@ -710,14 +704,14 @@
 
       <h4>8. Daily distributions used in the selected-year reliability stress test</h4>
       <p>The reliability chart is still a single representative 24-hour summer stress test, not a full production-cost model and not a full year of hourly simulations. The peak-load level uses Austin Energy's reported summer 2024 peak demand of 3,135 MW as the base value, grown forward with the model's load-growth slider to the year selected above the chart. That 3,135 MW value is treated as the peak-hour load anchor, not as a day-average level. The hourly load shape itself uses an ERCOT proxy from <a href="https://www.ercot.com/files/docs/2025/02/11/Native_Load_2025.zip" target="_blank" rel="noopener noreferrer">ERCOT's 2025 hourly native load archive</a>. The model identifies the top 10 August 2025 ERCOT peak-load days, averages each hour across those days, and then normalizes the resulting 24-hour load series so its own maximum equals 1.0 before applying the Austin Energy peak. That means the reliability chart uses an Austin Energy peak-load level with an ERCOT hourly shape proxy.</p>
-        <p>Solar is no longer using the ERCOT operational solar curve in this daily stress test. <strong>Utility solar</strong> now uses a capacity-weighted Austin Energy fleet profile built from the published utility-solar project list and approximate project locations. The model computes an August solar-geometry curve for each site, combines those curves by project MW, and then applies a simple clipping proxy using an assumed fleet-average <strong>DC/AC ratio of 1.3</strong>. <strong>Local solar</strong> uses an Austin-centered August solar-geometry curve without the utility-fleet clipping transform. This produces a bell-curve-style daily solar shape that is tied to Austin Energy's own asset geography rather than ERCOT's aggregate operational fleet behavior. Sources: <a href="https://austinenergy.com/about/company-profile/environment/renewable-power-generation" target="_blank" rel="noopener noreferrer">Austin Energy renewable project list</a>, <a href="https://albaenergy.com/solar-in-your-community-webberville-farm-manor/" target="_blank" rel="noopener noreferrer">Webberville overview</a>, and <a href="https://www.csisolar.com/na/212-mw-roserock-solar-plant/" target="_blank" rel="noopener noreferrer">Roserock project page</a>.</p>
-        <p>The model treats nuclear, biomass, baseload gas, coal, and geothermal as flat within the day. Wind still uses the ERCOT planning-profile-based August hourly availability curve, while solar now uses Austin Energy-specific geometry-plus-clipping for utility assets and Austin-local geometry for local solar. So the daily chart now mixes two different hourly approaches: ERCOT-derived wind availability and Austin Energy-specific solar availability.</p>
+        <p>Solar is no longer using the ERCOT operational solar curve in this daily stress test. <strong>Utility solar</strong> now uses a capacity-weighted Austin Energy fleet profile built from the published utility-solar project list and approximate project locations. The model computes an August solar-geometry curve for each site, combines those curves by project MW, and uses the resulting location-weighted fleet bell curve directly. <strong>Local solar</strong> uses an Austin-centered August solar-geometry curve. This produces a broader bell-curve-style daily solar shape that is tied to Austin Energy's own asset geography rather than ERCOT's aggregate operational fleet behavior. Source: <a href="https://austinenergy.com/about/company-profile/environment/renewable-power-generation" target="_blank" rel="noopener noreferrer">Austin Energy renewable project list</a>.</p>
+        <p>The model treats nuclear, biomass, baseload gas, coal, and geothermal as flat within the day. Wind still uses the ERCOT planning-profile-based August hourly availability curve, while solar now uses Austin Energy-specific geometry for utility assets and Austin-local geometry for local solar. So the daily chart mixes ERCOT-derived wind availability with Austin Energy-specific solar availability.</p>
         <div class="formula-block">
           <div class="formula-line"><span class="formula-label">Hourly load</span><span class="formula-math">\( \mathrm{Load}(h) = \mathrm{Peak}_{2035} \times \mathrm{load\ profile}(h) \)</span></div>
           <div class="formula-line"><span class="formula-label">Hourly utility solar</span><span class="formula-math">\( \mathrm{Utility\ Solar}(h) = \mathrm{utility\ solar\ MW} \times \mathrm{AE\ fleet\ solar\ profile}(h) \)</span></div>
           <div class="formula-line"><span class="formula-label">Hourly local solar</span><span class="formula-math">\( \mathrm{Local\ Solar}(h) = \mathrm{local\ solar\ MW} \times \mathrm{Austin\ local\ solar\ profile}(h) \)</span></div>
-          <div class="formula-line"><span class="formula-label">Hourly wind</span><span class="formula-math">\( \mathrm{Wind}(h) = \mathrm{wind\ MW} \times \mathrm{Aug\ Wind\ Availability}(h) \)</span></div>
-        </div>
+            <div class="formula-line"><span class="formula-label">Hourly wind</span><span class="formula-math">\( \mathrm{Wind}(h) = \mathrm{wind\ MW} \times \mathrm{Aug\ Wind\ Availability}(h) \)</span></div>
+          </div>
 
       <h4>9. Battery treatment</h4>
       <p>Batteries are modeled as four-hour storage. In other words, every 1 MW of battery adds 4 MWh of storage energy capacity in the reliability model. The model uses a simple state-of-charge simulation to charge during surplus hours and discharge during deficit hours. It does not currently include round-trip efficiency losses, battery degradation, or detailed charging constraints tied to a specific charging source. The default utility-scale battery baseline is 100 MW, based on Austin Energy's announced 2025 battery storage deal. The default local-battery baseline remains 0 MW because a current public Austin Energy aggregate for customer-sited battery capacity was not identified.</p>
