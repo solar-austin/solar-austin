@@ -47,7 +47,9 @@ function initSolarMap(lat, lng, zoom) {
     mapTypeId: 'satellite',
     tilt: 0,
     disableDefaultUI: true,
-    zoomControl: true,
+    zoomControl: false,
+    scrollwheel: false,
+    gestureHandling: 'none',
   });
 }
 
