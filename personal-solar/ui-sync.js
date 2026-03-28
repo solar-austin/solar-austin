@@ -365,7 +365,6 @@ function renderGoogleLookupResult() {
       els.resultProduction.textContent = '-';
       els.resultInstallCost.textContent = '-';
       els.resultInstallCostSource.textContent = '-';
-      if (els.mapFrame) els.mapFrame.src = buildLookupMapUrl(null, null);
       renderGoogleSegmentTable(null);
       return;
     }
@@ -380,7 +379,6 @@ function renderGoogleLookupResult() {
     els.resultInstallCostSource.textContent = googleSolarResult.installCostBenchmark
       ? `${googleSolarResult.installCostBenchmark.source} (${formatNumber(googleSolarResult.installCostBenchmark.count, 0)} samples)`
       : 'No benchmark for this address';
-    if (els.mapFrame) els.mapFrame.src = buildLookupMapUrl(googleSolarRawPayload, googleSolarResult);
     renderGoogleSegmentTable(Number(document.getElementById('systemSize')?.value));
   }
 

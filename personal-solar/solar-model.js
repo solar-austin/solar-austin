@@ -503,6 +503,7 @@ async function lookupGoogleRoof() {
       syncInstallCostFromGoogleResult();
       setUiError('');
       renderGoogleLookupResult();
+      updateSolarMapFromPayload(payload);
       els.status.textContent = 'Roof lookup complete. You can apply the suggested size and production now.';
   } catch (error) {
     googleSolarResult = null;
@@ -532,6 +533,7 @@ async function loadSampleGoogleRoofData() {
     }
     setUiError('');
     renderGoogleLookupResult();
+    updateSolarMapFromPayload(payload);
   } catch (error) {
     const elements = getGoogleLookupElements();
     setUiError(error.message || 'Sample roof data could not be loaded.');
