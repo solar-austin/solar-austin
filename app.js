@@ -197,11 +197,13 @@ const MIX_COMBINED_KEYS = ['existingPower', 'newGeneration', 'gap'];
  * 2025-08-07, 2025-08-09, 2025-08-11, 2025-08-19, 2025-08-17
  */
 const AUSTIN_LATITUDE_DEG = 30.2672;
+const AUSTIN_LONGITUDE_DEG = -97.7431;
 const SOLAR_PROFILE_EXPONENT = 0.78;
+const UTILITY_SOLAR_ASSUMED_DC_AC_RATIO = 1.3;
 const REPRESENTATIVE_MONTH_DAY_OF_YEAR = [15, 46, 74, 105, 135, 166, 196, 227, 258, 288, 319, 349];
 
-function getAustinSolarShapeFactor(dayOfYear, hourOfDay) {
-  const latRad = (AUSTIN_LATITUDE_DEG * Math.PI) / 180;
+function getSolarShapeFactor(dayOfYear, hourOfDay, latitudeDeg = AUSTIN_LATITUDE_DEG, longitudeDeg = AUSTIN_LONGITUDE_DEG, referenceLongitudeDeg = AUSTIN_LONGITUDE_DEG) {
+  const latRad = (latitudeDeg * Math.PI) / 180;
   const dayAngle = (2 * Math.PI * (dayOfYear - 1)) / 365;
   const declinationRad = 0.006918
     - (0.399912 * Math.cos(dayAngle))
@@ -210,7 +212,8 @@ function getAustinSolarShapeFactor(dayOfYear, hourOfDay) {
     + (0.000907 * Math.sin(2 * dayAngle))
     - (0.002697 * Math.cos(3 * dayAngle))
     + (0.00148 * Math.sin(3 * dayAngle));
-  const solarTimeHour = hourOfDay + 0.5;
+  // Shift solar noon by site longitude so the fleet curve broadens realistically across Texas.
+  const solarTimeHour = hourOfDay + 0.5 + ((longitudeDeg - referenceLongitudeDeg) / 15);
   const hourAngleRad = ((solarTimeHour - 12) * Math.PI) / 12;
   const sinElevation = (
     (Math.sin(latRad) * Math.sin(declinationRad))
@@ -219,6 +222,45 @@ function getAustinSolarShapeFactor(dayOfYear, hourOfDay) {
   const clampedElevation = Math.max(0, sinElevation);
   return clampedElevation > 0 ? Math.pow(clampedElevation, SOLAR_PROFILE_EXPONENT) : 0;
 }
+
+function getAustinSolarShapeFactor(dayOfYear, hourOfDay) {
+  return getSolarShapeFactor(dayOfYear, hourOfDay, AUSTIN_LATITUDE_DEG, AUSTIN_LONGITUDE_DEG, AUSTIN_LONGITUDE_DEG);
+}
+
+// Approximate site coordinates for Austin Energy's utility-scale solar assets.
+// These are used only to capture clock-time spread across the portfolio in the 24-hour reliability curve.
+const AE_UTILITY_SOLAR_SITES = [
+  { name: 'Webberville Solar Project', mw: 30, lat: 30.23, lon: -97.51 },
+  { name: 'Roserock', mw: 157.5, lat: 30.89, lon: -102.88 },
+  { name: 'East Pecos (Bootleg)', mw: 118.5, lat: 31.10, lon: -102.28 },
+  { name: 'Upton County (SPTX12B1)', mw: 157.5, lat: 31.10, lon: -102.06 },
+  { name: 'Waymark', mw: 178.5, lat: 31.03, lon: -103.01 },
+  { name: 'East Blacklands', mw: 144, lat: 30.47, lon: -97.55 },
+  // Public project list does not expose a simple site coordinate here; use an Austin-centered fallback.
+  { name: 'SE Aragon', mw: 180, lat: AUSTIN_LATITUDE_DEG, lon: AUSTIN_LONGITUDE_DEG },
+];
+
+function buildCapacityWeightedSolarProfile(dayOfYear, sites, referenceLongitudeDeg = AUSTIN_LONGITUDE_DEG) {
+  const totalMw = sites.reduce((sum, site) => sum + Math.max(0, site.mw ?? 0), 0);
+  if (!Number.isFinite(totalMw) || totalMw <= 0) return Array(24).fill(0);
+  return Array.from({ length: 24 }, (_, h) => {
+    const weighted = sites.reduce((sum, site) => (
+      sum + (Math.max(0, site.mw ?? 0) * getSolarShapeFactor(dayOfYear, h, site.lat, site.lon, referenceLongitudeDeg))
+    ), 0);
+    return weighted / totalMw;
+  });
+}
+
+function applyUtilitySolarClipping(profile, dcAcRatio = UTILITY_SOLAR_ASSUMED_DC_AC_RATIO) {
+  const maxVal = Math.max(...profile, 0);
+  if (!Number.isFinite(maxVal) || maxVal <= 0) return profile.map(() => 0);
+  return profile.map((value) => Math.min(1, (value / maxVal) * dcAcRatio));
+}
+
+const AUGUST_REPRESENTATIVE_DAY_OF_YEAR = REPRESENTATIVE_MONTH_DAY_OF_YEAR[7];
+const AE_UTILITY_SOLAR_HOURLY_PROFILE = applyUtilitySolarClipping(
+  buildCapacityWeightedSolarProfile(AUGUST_REPRESENTATIVE_DAY_OF_YEAR, AE_UTILITY_SOLAR_SITES),
+);
 
 function buildAustinMonthlySolarProfile() {
   const monthEnergyProxy = REPRESENTATIVE_MONTH_DAY_OF_YEAR.map((dayOfYear) => (
@@ -1141,20 +1183,22 @@ function runReliability(nukeMW, biomassMW, exSolarMW, exWindMW, newSolarMW, newD
   const totalSteps = REL_STEPS_PER_DAY * SIM_DAYS;
   // Treat Austin Energy's reported summer peak as the peak hour and use ERCOT only for shape.
   const dayLoadProfile = normalizeToPeak(expandHourlyProfile(PROF.load));
-  const daySolarProfile = expandHourlyProfile(PROF.solar);
-  const dayWindProfile = expandHourlyProfile(PROF.wind);
-  const loadProfile = Array.from({ length: totalSteps }, (_, s) => dayLoadProfile[s % REL_STEPS_PER_DAY]);
-  const solarProfile = Array.from({ length: totalSteps }, (_, s) => daySolarProfile[s % REL_STEPS_PER_DAY]);
-  const windProfile = Array.from({ length: totalSteps }, (_, s) => dayWindProfile[s % REL_STEPS_PER_DAY]);
+    const dayUtilitySolarProfile = expandHourlyProfile(AE_UTILITY_SOLAR_HOURLY_PROFILE);
+    const dayLocalSolarProfile = expandHourlyProfile(Array.from({ length: 24 }, (_, h) => getAustinSolarShapeFactor(AUGUST_REPRESENTATIVE_DAY_OF_YEAR, h)));
+    const dayWindProfile = expandHourlyProfile(PROF.wind);
+    const loadProfile = Array.from({ length: totalSteps }, (_, s) => dayLoadProfile[s % REL_STEPS_PER_DAY]);
+    const utilitySolarProfile = Array.from({ length: totalSteps }, (_, s) => dayUtilitySolarProfile[s % REL_STEPS_PER_DAY]);
+    const localSolarProfile = Array.from({ length: totalSteps }, (_, s) => dayLocalSolarProfile[s % REL_STEPS_PER_DAY]);
+    const windProfile = Array.from({ length: totalSteps }, (_, s) => dayWindProfile[s % REL_STEPS_PER_DAY]);
 
   // DR profile from headroom (supply − load): shift load toward hours with spare capacity (e.g. baseload at night, solar at midday).
   const grossLoadByStep = Array.from({ length: totalSteps }, (_, s) => loadProfile[s] * peak);
   const supplyAvail = Array.from({ length: totalSteps }, (_, s) =>
-    nukeMW + biomassMW + gasBase + coal + geo
-      + ((exSolarMW + newSolarMW) * solarProfile[s])
-      + (newDistSolarMW * solarProfile[s])
-      + (win * windProfile[s])
-  );
+      nukeMW + biomassMW + gasBase + coal + geo
+        + ((exSolarMW + newSolarMW) * utilitySolarProfile[s])
+        + (newDistSolarMW * localSolarProfile[s])
+        + (win * windProfile[s])
+    );
   const headroom = supplyAvail.map((s, i) => s - grossLoadByStep[i]);
   const meanHeadroom = headroom.reduce((a, b) => a + b, 0) / totalSteps;
   const drDev = headroom.map((hr) => meanHeadroom - hr);
@@ -1194,9 +1238,9 @@ function runReliability(nukeMW, biomassMW, exSolarMW, exWindMW, newSolarMW, newD
     simFull.load[s] = netLoad;
     const targetSupply = netLoad * (1 + marginGoal);
     targetByStep[s] = targetSupply;
-    const exSolarMwStep = exSolarMW * solarProfile[s];
-    const newSolarMwStep = newSolarMW * solarProfile[s];
-    const distSolarMwStep = newDistSolarMW * solarProfile[s];
+      const exSolarMwStep = exSolarMW * utilitySolarProfile[s];
+      const newSolarMwStep = newSolarMW * utilitySolarProfile[s];
+      const distSolarMwStep = newDistSolarMW * localSolarProfile[s];
     const exWindMwStep = exWindMW * windProfile[s];
     const newWindMwStep = newWindMW * windProfile[s];
     const solarMW = exSolarMwStep + newSolarMwStep + distSolarMwStep;
@@ -1238,10 +1282,10 @@ function runReliability(nukeMW, biomassMW, exSolarMW, exWindMW, newSolarMW, newD
       const chargeMW = Math.min(chargeHeadroom[s], totalBatt, (E_cap - soc) / REL_DT_HOURS);
       soc += chargeMW * REL_DT_HOURS;
     }
-    const supplyNoPeakerH = nukeMW + biomassMW + gasBase + coal + geo
-      + ((exSolarMW + newSolarMW) * solarProfile[s])
-      + (newDistSolarMW * solarProfile[s])
-      + (win * windProfile[s]);
+      const supplyNoPeakerH = nukeMW + biomassMW + gasBase + coal + geo
+        + ((exSolarMW + newSolarMW) * utilitySolarProfile[s])
+        + (newDistSolarMW * localSolarProfile[s])
+        + (win * windProfile[s]);
     const targetH = targetByStep[s];
     const requiredNowMW = Math.max(0, targetH - supplyNoPeakerH - gasPeak);
     const mandatoryDischargeMW = Math.min(requiredNowMW, totalBatt, soc / REL_DT_HOURS);
