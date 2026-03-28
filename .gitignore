@@ -1,1 +1,4 @@
 .codex-temp/netlify-dev.out.log
+# Local Netlify folder
+.netlify
+

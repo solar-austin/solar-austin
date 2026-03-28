@@ -42,6 +42,22 @@ h1 {
   font-weight: 800;
 }
 
+.nav-link {
+  display: inline-block;
+  padding: 8px 16px;
+  background: var(--accent);
+  color: #fff;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.nav-link:hover {
+  background: #0052a3;
+}
+
 .btn-solve {
   width: 100%;
   margin-top: 12px;
@@ -71,6 +87,94 @@ h1 {
 .btn-reset:hover {
   background: #f5f5f5;
   border-color: #999;
+}
+
+.scenario-action-card {
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid #d9dee5;
+  border-radius: 10px;
+  background: linear-gradient(180deg, #fbfcfd 0%, #f3f6f9 100%);
+}
+
+.scenario-action-head {
+  margin-bottom: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #6b7280;
+}
+
+.scenario-action-row {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: stretch;
+}
+
+.scenario-action-desc {
+  font-size: 12px;
+  line-height: 1.45;
+  color: #5f6b78;
+  padding: 2px 2px 0 2px;
+}
+
+.scenario-select {
+  width: 100%;
+  min-width: 0;
+  appearance: none;
+  border: 1px solid #c9d2dc;
+  border-radius: 8px;
+  background: #fff;
+  color: #223247;
+  padding: 10px 40px 10px 12px;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.2;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  background-image:
+    linear-gradient(45deg, transparent 50%, #5b6b7d 50%),
+    linear-gradient(135deg, #5b6b7d 50%, transparent 50%),
+    linear-gradient(180deg, #ffffff 0%, #f7fafc 100%);
+  background-position:
+    calc(100% - 18px) calc(50% - 2px),
+    calc(100% - 12px) calc(50% - 2px),
+    0 0;
+  background-size:
+    6px 6px,
+    6px 6px,
+    100% 100%;
+  background-repeat: no-repeat;
+}
+
+.scenario-select:focus {
+  outline: none;
+  border-color: #4f83cc;
+  box-shadow: 0 0 0 3px rgba(79, 131, 204, 0.18);
+}
+
+.scenario-apply-btn {
+  width: 100%;
+  min-width: 0;
+  margin-top: 0;
+  padding: 10px 18px;
+  border-radius: 8px;
+  background: linear-gradient(180deg, #172a3f 0%, #0f1c2b 100%);
+  box-shadow: 0 6px 14px rgba(15, 28, 43, 0.18);
+}
+
+.scenario-apply-btn:hover {
+  background: linear-gradient(180deg, #1c3551 0%, #132437 100%);
+}
+
+.btn-solve-secondary {
+  margin-top: 8px;
+  background: #1f2937;
+}
+
+.btn-solve-secondary:hover {
+  background: #111827;
 }
 
 .grid-main {
@@ -132,6 +236,22 @@ h1 {
   gap: 16px;
   flex-wrap: wrap;
   justify-content: flex-end;
+}
+
+.rel-year-slider-row {
+  margin: 10px 0 12px 0;
+}
+
+.rel-year-slider-row .slider-wrap {
+  width: 100%;
+}
+
+.rel-year-slider-scale {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 4px;
+  font-size: 11px;
+  color: #777;
 }
 
 .rel-chart-toggle input {
@@ -623,6 +743,158 @@ td:first-child {
   margin-top: 10px;
 }
 
+.assumptions-expand {
+  margin-top: 10px;
+}
+
+.assumptions-expand summary {
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 16px;
+  list-style: none;
+}
+
+.assumptions-expand summary::-webkit-details-marker {
+  display: none;
+}
+
+.assumptions-expand summary::after {
+  content: '+';
+  float: right;
+  color: #7a8696;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.assumptions-expand[open] summary::after {
+  content: '-';
+}
+
+.assumptions-copy {
+  margin-top: 14px;
+  border-top: 1px solid #eceff3;
+  padding-top: 14px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: #334155;
+}
+
+.assumptions-copy h4 {
+  margin: 14px 0 6px;
+  font-size: 14px;
+  color: #0f172a;
+}
+
+.assumptions-copy p {
+  margin: 0 0 10px;
+}
+
+.assumptions-table {
+  width: 100%;
+  margin: 0 0 12px;
+  border-collapse: collapse;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  overflow: hidden;
+  font-size: 12px;
+  background: #fff;
+}
+
+.assumptions-table-wrap {
+  margin: 0 0 12px;
+  overflow-x: auto;
+}
+
+.assumptions-matrix-table {
+  min-width: 1400px;
+}
+
+.assumptions-table th,
+.assumptions-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid #edf2f7;
+}
+
+.assumptions-table thead th {
+  background: #f8fafc;
+  color: #475569;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.assumptions-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.assumptions-copy pre {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #f8fafc;
+  overflow-x: auto;
+}
+
+.assumptions-copy code {
+  font-family: Consolas, Monaco, 'Courier New', monospace;
+  font-size: 12px;
+  color: #1e293b;
+}
+
+.formula-block {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px solid #dbe5ee;
+  border-radius: 10px;
+  background: linear-gradient(180deg, #fbfdff 0%, #f5f9fc 100%);
+}
+
+.formula-line {
+  display: grid;
+  grid-template-columns: minmax(140px, 180px) minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  padding: 4px 0;
+}
+
+.formula-line + .formula-line {
+  border-top: 1px solid #e7eef5;
+}
+
+.formula-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: #5b6b7d;
+}
+
+.formula-math {
+  display: block;
+  color: #1e293b;
+}
+
+.formula-line code {
+  display: block;
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
+.formula-math mjx-container {
+  margin: 0 !important;
+  font-size: 112% !important;
+}
+
+.assumptions-copy a {
+  color: #0f5c8a;
+}
+
+.assumptions-copy a:hover {
+  color: #0a4366;
+}
+
 .assumptions-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -658,6 +930,11 @@ td:first-child {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .formula-line {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+
   .chart-head {
     flex-wrap: wrap;
   }
@@ -671,9 +948,35 @@ td:first-child {
   width: 25%;
 }
 
+.buildout-table th.buildout-year,
+.buildout-table td:first-child {
+  width: 70px;
+  white-space: nowrap;
+}
+
+.buildout-table th:nth-child(6),
+.buildout-table td:nth-child(6),
+.buildout-table th:nth-child(9),
+.buildout-table td:nth-child(9) {
+  border-left: 2px solid #e2e8f0;
+}
+
 .fin-table tfoot tr.fin-total {
   background: #f0f0f0;
   font-weight: 700;
+}
+
+.fin-table tr.fin-section-divider td {
+  padding: 4px 0 0;
+  border: 0;
+  border-top: 1px solid #d8dee8;
+  background: transparent;
+}
+
+.table-note {
+  margin: 10px 2px 0;
+  font-size: 11px;
+  color: #666;
 }
 
 .money-inp {
@@ -686,6 +989,11 @@ td:first-child {
   font-family: inherit;
   font-weight: 600;
   color: var(--accent);
+}
+
+.fin-negative {
+  color: var(--safe);
+  font-weight: 700;
 }
 
 .warn-bg {
