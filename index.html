@@ -10,13 +10,12 @@
 
 <div class="wrap">
   <header>
-    <h1>Austin Energy Power Simulator</h1>
-  </header>
+    </header>
 
   <div class="kpi-bar">
     <div class="kpi">
       <div class="kpi-val" id="k_rate">0.0¢</div>
-      <div class="kpi-lbl"><span class="has-tooltip" title="Average cost of generation in 2035: total system cost (all resources including market gap) divided by 2035 load, in cents per kWh. Based on base $/MWh and TCOS adder for remote resources.">Est. Gen Rate (2035)</span></div>
+      <div class="kpi-lbl"><span class="has-tooltip" title="Average cost of generation in 2035: total system cost divided by 2035 load, in cents per kWh. This includes modeled resource costs, TCOS adders where applicable, and net market purchases or sales priced from the ERCOT Austin load-zone month-by-hour matrix.">Est. Gen Rate (2035)</span></div>
     </div>
     <div class="kpi">
       <div class="kpi-val" id="k_clean">0%</div>
@@ -27,44 +26,44 @@
       <div class="kpi-lbl"><span class="has-tooltip" title="Worst-hour cushion on the August peak day: the minimum over 24 hours of (supply − load) / load, as a percent. Positive = headroom; negative = at least one deficit hour. Green when at or above goal.">Supply Margin</span></div>
       <div class="kpi-goal">
         <label class="kpi-goal-lbl">Goal</label>
-        <input type="range" id="p_margin_goal" min="0" max="30" step="1" value="15" class="kpi-goal-slider" data-default="15" data-snap="false">
-        <span class="kpi-goal-val" id="v_margin_goal">15%</span>
+        <input type="range" id="p_margin_goal" min="0" max="30" step="0.25" value="13.75" class="kpi-goal-slider" data-default="13.75" data-snap="false">
+        <span class="kpi-goal-val" id="v_margin_goal">13.75%</span>
       </div>
     </div>
     <div class="kpi" id="risk_card">
       <div class="kpi-val" id="k_risk">0</div>
-      <div class="kpi-lbl"><span class="has-tooltip" title="Number of hours on the August peak stress day when load exceeds supply by more than 10 MW. Zero = system meets load every hour; red when &gt; 0.">Risk Hours</span></div>
+      <div class="kpi-lbl"><span class="has-tooltip" title="Number of hours on the August peak stress day when load exceeds supply by more than 10 MW. Zero means the modeled portfolio serves load every hour of that day.">Risk Hours</span></div>
     </div>
   </div>
 
   <div class="grid-main">
     <div class="card inputs-card">
-      <h3>Inputs</h3>
+      <h3>2035 Targets &amp; Inputs</h3>
 
       <h4 class="input-section input-section-with-target"><span>Carbon Free</span><span class="inputs-values-header-inline">2035 target</span></h4>
       <div class="row">
         <div class="row-head">
           <span class="swatch" style="background: #4FC3F7"></span>
-          <span class="lbl has-tooltip" title="Total wind power in 2035 (MW), including existing contracts. New wind in 2035 is total wind minus existing wind in 2035.">Wind</span>
+          <span class="lbl has-tooltip" title="Total utility wind power in 2035 (MW), including existing contracts. New wind in 2035 is total wind minus existing wind in 2035.">Utility Wind</span>
         </div>
-        <div class="slider-wrap"><input type="range" id="p_wind" min="864" max="5000" value="1631" data-default="1631"></div>
-        <span class="val" id="v_wind">1630 MW</span>
+          <div class="slider-wrap"><input type="range" id="p_wind" min="864" max="6000" value="864" data-default="864"></div>
+          <span class="val" id="v_wind">864 MW</span>
       </div>
       <div class="row">
         <div class="row-head">
           <span class="swatch" style="background: #E09328"></span>
           <span class="lbl has-tooltip" title="Total utility solar power in 2035 (MW), including existing contracts after degradation. New utility solar in 2035 is total utility solar minus existing utility solar in 2035.">Utility Solar</span>
         </div>
-        <div class="slider-wrap"><input type="range" id="p_solar" min="806" max="5000" value="967" data-default="967"></div>
-        <span class="val" id="v_solar">966 MW</span>
+          <div class="slider-wrap"><input type="range" id="p_solar" min="806" max="6000" value="806" data-default="806"></div>
+        <span class="val" id="v_solar">806 MW</span>
       </div>
       <div class="row">
         <div class="row-head">
           <span class="swatch" style="background: #C9852F"></span>
-          <span class="lbl has-tooltip" title="Total distributed solar power in 2035 (MW). Annual additions are calculated versus the 2025 baseline of 188 MW.">Distributed Solar</span>
+          <span class="lbl has-tooltip" title="Total local solar power in 2035 (MW). Annual additions are calculated versus the 2025 baseline of 188 MW. Default target assumes 25 MW/year of added local solar through 2035.">Local Solar</span>
         </div>
-        <div class="slider-wrap"><input type="range" id="p_dist_solar" min="0" max="3000" value="188" data-default="188"></div>
-        <span class="val" id="v_dist_solar">188 MW</span>
+        <div class="slider-wrap"><input type="range" id="p_dist_solar" min="188" max="3000" value="438" data-default="438"></div>
+        <span class="val" id="v_dist_solar">438 MW</span>
       </div>
       <div class="row">
         <div class="row-head">
@@ -82,47 +81,63 @@
         <div class="slider-wrap"><input type="range" id="p_nuke" min="0" max="1500" value="430" data-default="430"></div>
         <span class="val" id="v_nuke">430 MW</span>
       </div>
+      <div class="row">
+        <div class="row-head">
+          <span class="swatch" style="background: #6B8E23"></span>
+          <span class="lbl has-tooltip" title="Biomass capacity (MW) from Austin Energy's Nacogdoches biomass resource. Included as an existing flat-output carbon-free resource in the model.">Biomass</span>
+        </div>
+        <div class="slider-wrap"><input type="range" id="p_biomass" min="0" max="300" value="105" data-default="105"></div>
+        <span class="val" id="v_biomass">105 MW</span>
+      </div>
       <h4 class="input-section">Fossil Fuels</h4>
       <div class="row">
         <div class="row-head">
           <span class="swatch" style="background: #90A4AE"></span>
           <span class="lbl has-tooltip" title="Gas combined-cycle capacity (MW) available every hour. Runs as baseload in this model.">Gas - Baseload</span>
         </div>
-        <div class="slider-wrap"><input type="range" id="p_gas_base" min="0" max="1500" value="300" data-default="300"></div>
-        <span class="val" id="v_gas_base">300</span>
+        <div class="slider-wrap"><input type="range" id="p_gas_base" min="0" max="1500" value="595" data-default="595"></div>
+        <span class="val" id="v_gas_base">595</span>
       </div>
       <div class="row">
         <div class="row-head">
           <span class="swatch" style="background: #607D8B"></span>
           <span class="lbl has-tooltip" title="Gas peaker capacity (MW). Dispatched only when supply is below the margin goal; fills the shortfall up to this capacity.">Gas - Peaker</span>
         </div>
-        <div class="slider-wrap"><input type="range" id="p_gas_peak" min="0" max="1500" value="200" data-default="200"></div>
-        <span class="val" id="v_gas_peak">200</span>
+        <div class="slider-wrap"><input type="range" id="p_gas_peak" min="0" max="1500" value="205" data-default="205"></div>
+        <span class="val" id="v_gas_peak">205</span>
       </div>
       <div class="row">
         <div class="row-head">
           <span class="swatch" style="background: #5D4037"></span>
           <span class="lbl has-tooltip" title="Coal capacity (MW) available every hour. Set to 0 for a coal-free scenario.">Coal</span>
         </div>
-        <div class="slider-wrap"><input type="range" id="p_coal" min="0" max="2000" value="0" data-default="0"></div>
-        <span class="val" id="v_coal">0</span>
+        <div class="slider-wrap"><input type="range" id="p_coal" min="0" max="2000" value="605" data-default="605"></div>
+        <span class="val" id="v_coal">605</span>
       </div>
       <h4 class="input-section">Capacity Management</h4>
       <div class="row">
         <div class="row-head">
           <span class="swatch" style="background: #CE93D8"></span>
-          <span class="lbl has-tooltip" title="4-hour battery capacity (MW nameplate). Charges on surplus, discharges on shortfall during the August peak stress test.">Firm Battery</span>
+          <span class="lbl has-tooltip" title="4-hour utility-scale battery capacity (MW nameplate). Charges on surplus, discharges on shortfall during the August peak stress test.">Utility-Scale Battery</span>
         </div>
-        <div class="slider-wrap"><input type="range" id="p_batt" min="0" max="2500" value="500" data-default="500"></div>
-        <span class="val" id="v_batt">500</span>
+        <div class="slider-wrap"><input type="range" id="p_batt" min="0" max="2500" value="100" data-default="100"></div>
+        <span class="val" id="v_batt">100</span>
       </div>
       <div class="row">
         <div class="row-head">
           <span class="swatch" style="background: #F3B6D9"></span>
-          <span class="lbl has-tooltip" title="4-hour distributed battery capacity (MW nameplate). Uses the same reliability logic as firm battery but is tracked separately in the chart and cost table.">Distributed Battery</span>
+          <span class="lbl has-tooltip" title="4-hour local battery capacity (MW nameplate). Uses the same reliability logic as utility-scale battery but is tracked separately in the chart and cost table.">Local Battery</span>
         </div>
         <div class="slider-wrap"><input type="range" id="p_dist_batt" min="0" max="2500" value="0" data-default="0"></div>
         <span class="val" id="v_dist_batt">0</span>
+      </div>
+      <div class="row">
+        <div class="row-head">
+          <span class="swatch" style="background: #E8C547"></span>
+          <span class="lbl has-tooltip" title="Maximum market import support available in a stressed hour (MW). In the reliability chart, this is treated as a capped supply layer available after local generation, battery discharge, and gas peakers.">Import Allowance</span>
+        </div>
+        <div class="slider-wrap"><input type="range" id="p_import_allowance" min="0" max="3000" value="700" data-default="700"></div>
+        <span class="val" id="v_import_allowance">700 MW</span>
       </div>
       <div class="row">
         <div class="row-head">
@@ -140,22 +155,7 @@
         <div class="slider-wrap"><input type="range" id="p_dr" min="0" max="1200" value="0" data-default="0"></div>
         <span class="val" id="v_dr">0</span>
       </div>
-      <div class="row row-readout">
-        <div class="row-head">
-          <span class="lbl has-tooltip" title="Total effective generation power in 2035 (MW), excluding battery. Includes nuclear, gas, coal, wind, solar, and geothermal.">2035 Power Sum (No Battery)</span>
-        </div>
-        <span class="val" id="v_total_mw_2035">0 MW</span>
-      </div>
-
       <h4 class="input-section">Assumptions</h4>
-      <div class="row">
-        <div class="row-head">
-          <span class="swatch" style="background: var(--accent)"></span>
-          <span class="lbl has-tooltip" title="Transmission cost of service adder ($/MWh) applied to remote resources (nuclear, coal, wind, solar, gap) in the financial table and gen rate.">TCOS Adder</span>
-        </div>
-        <div class="slider-wrap"><input type="range" id="p_tx" min="0" max="80" value="40" data-default="40" data-snap="false"></div>
-        <span class="val" id="v_tx">$40</span>
-      </div>
       <div class="row">
         <div class="row-head">
           <span class="swatch" style="background: #B0BEC5"></span>
@@ -163,6 +163,14 @@
         </div>
         <div class="slider-wrap"><input type="range" id="p_growth" min="0" max="5" step="0.1" value="1.5" data-default="1.5" data-snap="false"></div>
         <span class="val" id="v_growth">1.5%</span>
+      </div>
+      <div class="row">
+        <div class="row-head">
+          <span class="swatch" style="background: #94a3b8"></span>
+          <span class="lbl has-tooltip" title="Reference display for the average 2025 ERCOT Austin load-zone DAM price. The model prices market purchases and sales directly from the full ERCOT month-by-hour price matrix rather than from a user-set base price.">ERCOT Avg Market Price</span>
+        </div>
+      <div class="slider-wrap"><input type="range" id="p_market_sale" min="0" max="120" step="1" value="37" data-default="37" data-snap="false" disabled></div>
+      <span class="val" id="v_market_sale">$37</span>
       </div>
 
       <details class="ui-options-panel">
@@ -236,14 +244,35 @@
         <input type="checkbox" id="show_new_power_together" onchange="update()">
         <span class="has-tooltip" title="Split-by-resource mode only: keep all new generation grouped at the top of the stack across all charts.">Show new power together</span>
       </label>
+      <label class="left-toggle">
+        <input type="checkbox" id="p_allow_geo_solver">
+        <span class="has-tooltip" title="Auto-solver only. When unchecked, the solver treats geothermal as unavailable and only uses wind, solar, and battery. Manual geothermal scenarios still work normally.">Allow geothermal in auto-solve</span>
+      </label>
       <button class="btn-reset" onclick="resetInputs()">Reset</button>
-      <button class="btn-solve has-tooltip" onclick="autoSolve()" title="Scale New Wind, New Utility Solar, Geothermal, and Battery until the minimum supply margin reaches 15%. Works for any load growth.">Auto-Solve Reliability Gap</button>
+      <div class="scenario-action-card">
+        <div class="scenario-action-head">Scenario Actions</div>
+        <div class="scenario-action-row">
+          <select id="p_scenario_action" class="scenario-select" aria-label="Scenario action" onchange="update()">
+                <option value="reliability-gap">Meet peak reliability</option>
+                <option value="zero-emissions">Meet peak reliability (zero emissions)</option>
+                <option value="portfolio-12">Portfolio 12 - renewables + storage, gas out</option>
+                <option value="portfolio-15">Portfolio 15 - more solar + storage, gas out</option>
+                <option value="ascend-a">Ascend A - added wind + gas peakers</option>
+                <option value="ascend-b">Ascend B - added wind, solar + storage</option>
+                <option value="ascend-c">Ascend C - modest wind + added gas</option>
+              <option value="scale-with-growth">Scale with growth</option>
+              <option value="scale-with-growth-zero-emissions">Scale with growth (zero emissions)</option>
+          </select>
+          <div class="scenario-action-desc" id="scenario_action_desc">Auto-scales new clean resources and storage to meet the selected peak reliability target.</div>
+            <button class="btn-solve scenario-apply-btn" onclick="applyScenarioAction()">Apply</button>
+          </div>
+        </div>
     </div>
 
     <div>
       <div class="card">
         <div class="chart-head">
-          <h3 class="has-tooltip" title="Stacked area chart: supply by resource (nuclear, gas, coal, wind, solar, geo, EE, gap) and total load (Usage line) over the planning horizon. Gap = shortfall met by market purchases.">10 year outlook - resource mix (<span id="mix_units_lbl">TWh</span>)</h3>
+          <h3 class="has-tooltip" title="Stacked area chart: supply by resource (nuclear, biomass, gas, coal, wind, solar, geo, EE, gap) and total load (Usage line) over the planning horizon. Gap = shortfall met by market purchases.">10 year outlook - resource mix (<span id="mix_units_lbl">TWh</span>)</h3>
           <div class="chart-head-toggles">
             <label class="rel-chart-toggle">
               <input type="checkbox" id="mix_units_mw" onchange="update()">
@@ -259,19 +288,28 @@
       </div>
       <div class="card">
         <div class="chart-head">
-          <h3 class="has-tooltip" title="Simulated August peak day: 24-hour supply vs load (MW). Shows whether the system meets load with the margin goal; deficit (red) and risk hours indicate shortfalls.">2035 Peak reliability (24-Hour Stress Test)</h3>
+          <h3 class="has-tooltip" title="Simulated August peak day: 24-hour supply vs load (MW). Shows whether the system meets load with the margin goal; deficit (red) and risk hours indicate shortfalls."><span id="rel_year_lbl">2035</span> Peak reliability (24-Hour Stress Test)</h3>
           <div class="chart-head-toggles">
             <label class="rel-chart-toggle">
-              <input type="checkbox" id="p_show_risk_hours" checked onchange="update()">
+              <input type="checkbox" id="p_show_risk_hours" onchange="update()">
               <span class="has-tooltip" title="Reliability chart only: highlight each risk hour with a light red background band and subtle red edge lines.">Show risk hour bands</span>
             </label>
+          </div>
+        </div>
+        <div class="rel-year-slider-row">
+          <div class="slider-wrap">
+            <input type="range" id="p_rel_year" min="2025" max="2035" step="1" value="2035" data-default="2035" data-snap="false">
+          </div>
+          <div class="rel-year-slider-scale" aria-hidden="true">
+            <span>2025</span>
+            <span>2035</span>
           </div>
         </div>
         <div class="chart-box-sm"><canvas id="relChart"></canvas></div>
       </div>
       <div class="card">
         <div class="chart-head">
-          <h3 class="has-tooltip" title="2035 monthly seasonality (monthly average MW), using the same resource stacks and styling as the other charts. Load follows an Austin best-guess seasonal profile; solar and wind use best-guess seasonal generation profiles; annual totals stay anchored to your scenario.">2035 full year (Monthly Avg MW)</h3>
+          <h3 class="has-tooltip" title="Selected-year monthly seasonality (monthly average MW), using the same resource stacks and styling as the other charts. Load follows an Austin best-guess seasonal profile; solar and wind use best-guess seasonal generation profiles; annual totals stay anchored to your scenario."><span id="season_year_lbl">2035</span> full year (Monthly Avg MW)</h3>
         </div>
         <div class="chart-box-mid"><canvas id="seasonChart"></canvas></div>
       </div>
@@ -280,15 +318,16 @@
 
   <div class="grid-bot">
     <div class="card">
-      <h3 class="has-tooltip" title="2035 cost by resource: volume (TWh), base $/MWh, transmission adder for remote resources, and total $M. Editable base prices update the gen rate. Rows under 0.05 TWh are hidden.">Landed Cost Financials (2035 Snapshot)</h3>
+      <h3 class="has-tooltip" title="2035 cost by resource: volume (TWh), base levelized yearly cost ($/MWh), per-resource TCOS, landed $/MWh, and total $M. Here, levelized yearly cost means the model spreads a resource's upfront project cost over its life instead of charging it all in one year. Landed cost equals base cost plus TCOS. Market purchase and sale rows use effective prices derived from the ERCOT Austin load-zone month-by-hour matrix. Rows under 0.05 TWh are hidden.">Landed Cost Financials (2035 Snapshot)</h3>
       <table class="fin-table">
         <thead>
           <tr>
-            <th class="fin-resource">Resource</th>
-            <th>Vol</th>
-            <th>Base ($)</th>
-            <th>Tx Adder ($)</th>
-            <th>Total ($M)</th>
+            <th class="fin-resource"><span class="has-tooltip" title="Generation resource or market item included in the 2035 landed cost snapshot. This table is meant to show the all-in annual cost contribution of each part of the modeled 2035 system.">Resource</span></th>
+            <th><span class="has-tooltip" title="Estimated 2035 annual energy volume for that resource, in terawatt-hours. Battery rows show installed MW instead because battery costs in this model are handled as annual capacity-style costs rather than energy output.">Vol</span></th>
+            <th><span class="has-tooltip" title="Base levelized yearly cost assumption for that resource before TCOS is added. This means the model spreads the resource's upfront project cost over its useful life and turns it into a yearly energy cost before local delivery or transmission adders.">Base ($)</span></th>
+            <th><span class="has-tooltip" title="Transmission cost of service adder applied to eligible resources. This is used to capture an extra delivered-cost penalty for non-local resources on top of the base cost assumption.">TCOS ($)</span></th>
+            <th><span class="has-tooltip" title="Landed cost per MWh, calculated as base cost plus TCOS. This is the effective delivered energy cost used in the total annual cost estimate for that row.">Total ($)</span></th>
+            <th><span class="has-tooltip" title="Estimated total annual cost contribution from that resource in 2035, in millions of dollars. Negative values indicate surplus sales revenue that offsets total system cost.">Total ($M)</span></th>
           </tr>
         </thead>
         <tbody id="finBody"></tbody>
@@ -298,15 +337,415 @@
             <td id="t_vol">--</td>
             <td>Avg: <span id="t_avg">--</span></td>
             <td></td>
+            <td></td>
             <td id="t_cost">--</td>
           </tr>
         </tfoot>
       </table>
     </div>
+    <div class="card">
+      <h3 class="has-tooltip" title="Year-by-year additions needed to reach the selected 2035 targets, shown in MW rather than annualized dollars. This table excludes the legacy fleet and focuses only on the buildout program itself.">Annual Buildout (MW)</h3>
+      <table class="fin-table buildout-table">
+        <thead>
+          <tr>
+            <th class="buildout-year"><span class="has-tooltip" title="Planning year for the annual buildout estimates below. Each row shows what the buildout program looks like in that year, separate from the legacy fleet.">Year</span></th>
+            <th><span class="has-tooltip" title="New utility wind MW added in that year.">Utility Wind</span></th>
+            <th><span class="has-tooltip" title="New utility solar MW added in that year.">Utility Solar</span></th>
+            <th><span class="has-tooltip" title="New local solar MW added in that year.">Local Solar</span></th>
+            <th><span class="has-tooltip" title="New geothermal MW added in that year.">Geo</span></th>
+            <th><span class="has-tooltip" title="New utility-scale battery MW added in that year.">Utility Battery</span></th>
+            <th><span class="has-tooltip" title="New local battery MW added in that year.">Local Battery</span></th>
+            <th><span class="has-tooltip" title="Total MW added in this specific year only.">This Year's Additions MW</span></th>
+            <th><span class="has-tooltip" title="Total buildout MW online by that year, excluding the legacy fleet.">Cumulative Buildout MW</span></th>
+          </tr>
+        </thead>
+        <tbody id="buildoutBody"></tbody>
+        <tfoot>
+          <tr class="fin-total">
+            <td>TOTAL</td>
+            <td id="b_wind_total">--</td>
+            <td id="b_solar_total">--</td>
+            <td id="b_dist_solar_total">--</td>
+            <td id="b_geo_total">--</td>
+            <td id="b_batt_total">--</td>
+            <td id="b_dist_batt_total">--</td>
+            <td id="b_new_cost_total">--</td>
+            <td id="b_cost_total">--</td>
+          </tr>
+        </tfoot>
+      </table>
+      <p class="table-note">This table shows the year-by-year buildout program in MW. It excludes the legacy fleet and tracks only added resources, showing what is added in each year and the cumulative buildout online by that point.</p>
+    </div>
   </div>
+  <details class="card assumptions-expand">
+    <summary>Detailed Methodology, Assumptions, and Sources</summary>
+    <div class="assumptions-copy">
+      <p>Austin Energy has an adopted 2035 direction to move toward a carbon-free portfolio in its <a href="https://austinenergy.com/about/reports/generation-resource-planning" target="_blank" rel="noopener noreferrer">Resource, Generation and Climate Protection Plan to 2035</a>, but it has not published a fully specified project-by-project implementation plan with complete build schedules, fixed procurement outcomes, and unit-by-unit retirement dates. This model should therefore be read as an Austin Energy-specific scenario tool built from the best public data available, with clear distinctions between Austin Energy source data, ERCOT shape proxies, national reference values, and explicit planning assumptions.</p>
+      <p>This model combines three linked views of the same scenario: an annual energy outlook from 2025 through 2035, a 24-hour 2035 summer reliability stress test, and a 2035 landed-cost table. The numbers here are meant to make the model transparent. Some inputs are tied to public Austin Energy or ERCOT data, while others are explicit planning assumptions chosen in the model and kept editable in the UI.</p>
+
+      <h4>1. Horizon, units, and baseline structure</h4>
+      <p>The planning horizon is 11 years, from 2025 through 2035. Annual energy is modeled in TWh, reliability is modeled hour by hour in MW and MWh, and costs are shown in $/MWh, $k/MW-year for batteries, and total annual cost in millions of dollars. The baseline 2025 annual load is 14.2 TWh. The baseline summer peak for the reliability stress test is 3,135 MW, based on Austin Energy's reported summer 2024 peak demand. The load-growth slider applies to both the annual energy outlook and the 2035 stress test.</p>
+      <div class="formula-block">
+        <div class="formula-line"><span class="formula-label">Annual load</span><span class="formula-math">\( \mathrm{Load}(i) = 14.2 \times (1 + \mathrm{growth}/100)^i \)</span></div>
+        <div class="formula-line"><span class="formula-label">2035 stress-day peak</span><span class="formula-math">\( \mathrm{Peak}_{2035} = 3135 \times (1 + \mathrm{growth}/100)^{10} \)</span></div>
+      </div>
+
+      <h4>1a. Initial conditions and starting fleet</h4>
+      <p>The model's starting point is a mix of current Austin Energy fleet values and planning defaults. Current-fleet defaults are used where Austin Energy has a clearly published resource quantity: nuclear starts at 430 MW (Austin Energy's STP share), biomass starts at 105 MW (Nacogdoches), utility wind starts at about 1,796 MW, utility battery starts at 100 MW based on Austin Energy's announced 2025 utility-scale battery deal, and gas baseload/peaker start at 595 MW and 205 MW. These are meant to approximate today's published Austin Energy portfolio and local thermal fleet rather than an optimized 2035 endpoint.</p>
+      <p>Not every default is a pure current-fleet snapshot. Utility solar in the model still defaults to the surviving existing utility-solar portfolio used in the contract-retirement logic, and local solar defaults to a planning target path rather than today's installed level. Local battery remains at 0 MW by default because a clear current Austin Energy public aggregate for customer-sited battery capacity was not identified. So the starting conditions are best read as a transparent hybrid baseline: current Austin Energy where public quantities are clear, plus explicit planning assumptions where they are not.</p>
+      <table class="assumptions-table">
+        <thead>
+          <tr>
+            <th>Input</th>
+            <th>Default</th>
+            <th>Interpretation</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>Nuclear</td><td>430 MW</td><td>Current Austin Energy STP share</td></tr>
+          <tr><td>Biomass</td><td>105 MW</td><td>Current Nacogdoches biomass capacity</td></tr>
+          <tr><td>Utility Wind</td><td>1,796 MW</td><td>Current published Austin Energy wind portfolio</td></tr>
+          <tr><td>Utility Solar</td><td>806 MW</td><td>Existing utility-solar baseline used by the model's contract logic</td></tr>
+          <tr><td>Local Solar</td><td>438 MW</td><td>Planning default based on 188 MW baseline plus 25 MW/year</td></tr>
+          <tr><td>Gas (Baseload)</td><td>595 MW</td><td>Current Sand Hill local gas capacity proxy</td></tr>
+          <tr><td>Gas (Peaker)</td><td>205 MW</td><td>Current Decker/Mueller peaker proxy</td></tr>
+        </tbody>
+      </table>
+
+      <h4>1b. Presets and modeled portfolio end states</h4>
+        <p>The scenario dropdown mixes two kinds of presets: model actions and approximate translations of public Austin Energy portfolio summaries. The public portfolio presets below should be read as simplified 2035 end states in this model, not exact reproductions of the original studies. Where a source portfolio uses categories the model does not represent directly, the closest available slider is used instead. The current public portfolio translations come from two Austin Energy briefing decks: <a href="https://services.austintexas.gov/edims/document.cfm?id=439557" target="_blank" rel="noopener noreferrer">Round II Modeling Results</a> for Portfolios 12 and 15 and <a href="https://services.austintexas.gov/edims/document.cfm?id=437663" target="_blank" rel="noopener noreferrer">September 2024 Austin Energy briefing</a> for Ascend A-C.</p>
+      <table class="assumptions-table">
+        <thead>
+          <tr>
+            <th>Preset</th>
+            <th>Type</th>
+            <th>Current interpretation in this model</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>Meet peak reliability</td><td>Model action</td><td>Auto-scales new clean resources and storage to meet the selected peak-day reliability target.</td></tr>
+          <tr><td>Meet peak reliability (zero emissions)</td><td>Model action</td><td>Zeros fossil generation, then auto-scales clean resources and storage to meet the selected peak-day reliability target.</td></tr>
+          <tr><td>Scale with growth</td><td>Model action</td><td>Scales the starting system with load growth so the end-state mix grows with demand.</td></tr>
+          <tr><td>Scale with growth (zero emissions)</td><td>Model action</td><td>Scales the clean system with growth, keeps nuclear flat, and reallocates removed fossil energy into wind and solar.</td></tr>
+          <tr><td>Portfolio 12 - renewables + storage, gas out</td><td>Public portfolio translation</td><td>Approximate 2035 translation of Austin Energy Portfolio 12.</td></tr>
+          <tr><td>Portfolio 15 - more solar + storage, gas out</td><td>Public portfolio translation</td><td>Approximate 2035 translation of Austin Energy Portfolio 15, including the published +250 MW import-capacity increase.</td></tr>
+          <tr><td>Ascend A - added wind + gas peakers</td><td>Public portfolio translation</td><td>Approximate 2035 translation of Ascend Portfolio A, with hydrogen-capable generation represented as gas.</td></tr>
+          <tr><td>Ascend B - added wind, solar + storage</td><td>Public portfolio translation</td><td>Approximate 2035 translation of Ascend Portfolio B, with community solar mapped to local solar.</td></tr>
+          <tr><td>Ascend C - modest wind + added gas</td><td>Public portfolio translation</td><td>Approximate 2035 translation of Ascend Portfolio C, with Fayette not modeled separately.</td></tr>
+        </tbody>
+      </table>
+      <p>The table below shows the current 2035 slider mapping for the public portfolio presets. Values are the actual end-state assumptions currently applied by the model.</p>
+      <table class="assumptions-table">
+        <thead>
+          <tr>
+            <th>Preset</th>
+            <th>Utility Wind</th>
+            <th>Utility Solar</th>
+            <th>Local Solar</th>
+            <th>Utility Battery</th>
+            <th>DR</th>
+            <th>Gas Baseload</th>
+            <th>Gas Peaker</th>
+            <th>Coal</th>
+            <th>Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Portfolio 12 - renewables + storage, gas out</td>
+            <td>Starting wind + allocated share of 2,500 MW wind/solar PPAs</td>
+            <td>Starting solar + allocated share of 2,500 MW wind/solar PPAs</td>
+            <td>700 MW</td>
+            <td>525 MW</td>
+            <td>300 MW</td>
+            <td>0 MW</td>
+            <td>0 MW</td>
+            <td>0 MW</td>
+            <td>Wind/solar split is not published in the source summary, so the model allocates the 2,500 MW PPA bucket using Austin Energy's current utility wind/solar mix.</td>
+          </tr>
+          <tr>
+            <td>Portfolio 15 - more solar + storage, gas out</td>
+            <td>Starting wind + allocated share of 2,500 MW wind/solar PPAs</td>
+            <td>Starting solar + allocated share of 2,500 MW wind/solar PPAs</td>
+            <td>960 MW</td>
+            <td>625 MW</td>
+            <td>325 MW</td>
+            <td>0 MW</td>
+            <td>0 MW</td>
+            <td>0 MW</td>
+            <td>Uses the published 2,500 MW wind/solar PPA bucket, 960 MW local solar, 625 MW local storage, 325 MW demand response, and the published +250 MW import-capacity increase. The wind/solar split is allocated using Austin Energy's current utility mix.</td>
+          </tr>
+          <tr>
+            <td>Ascend A - added wind + gas peakers</td>
+            <td>Starting wind + 1,885 MW</td>
+            <td>Starting value</td>
+            <td>Starting value</td>
+            <td>Starting value</td>
+            <td>Starting value</td>
+            <td>595 MW</td>
+            <td>835 MW</td>
+            <td>0 MW</td>
+            <td>Public summary gives 1,885 MW of added wind PPAs and 630 MW of added local hydrogen-capable peakers. The model represents hydrogen-capable generation as gas and therefore keeps existing gas while adding peakers.</td>
+          </tr>
+          <tr>
+            <td>Ascend B - added wind, solar + storage</td>
+            <td>Starting wind + 1,885 MW</td>
+            <td>Starting value</td>
+            <td>2,800 MW</td>
+            <td>2,750 MW</td>
+            <td>Starting value</td>
+            <td>0 MW</td>
+            <td>0 MW</td>
+            <td>0 MW</td>
+            <td>Public summary gives 1,885 MW of added wind PPAs, 2,800 MW of community solar, and 2,750 MW of local storage. Community solar is mapped to local solar.</td>
+          </tr>
+          <tr>
+            <td>Ascend C - modest wind + added gas</td>
+            <td>Starting wind + 400 MW</td>
+            <td>Starting value</td>
+            <td>Starting value</td>
+            <td>Starting value</td>
+            <td>Starting value</td>
+            <td>Starting gas baseload + 200 MW</td>
+            <td>Starting gas peaker + 400 MW</td>
+            <td>0 MW</td>
+            <td>Public summary gives 400 MW of added wind PPAs, 400 MW of added local peakers, and 200 MW of added local combined cycle. Fayette is not modeled separately, so coal is shown as 0 in the 2035 endpoint.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h4>2. Annual energy scaling in the long-range model</h4>
+      <p>The annual 2025-2035 outlook converts nameplate MW into annual TWh using resource-specific annual scaling factors. That annual-energy layer is used in the top chart and in the 2035 monthly chart. The monthly chart then reshapes those annual totals across months with normalized seasonal factors, but it does not change the yearly total.</p>
+      <div class="formula-block">
+        <div class="formula-line"><span class="formula-label">Annual energy conversion</span><span class="formula-math">\( \mathrm{Annual\ TWh} = \dfrac{\mathrm{MW} \times 8760 \times \mathrm{annual\ scaling\ factor}}{1{,}000{,}000} \)</span></div>
+        <div class="formula-line"><span class="formula-label">Seasonal reshaping</span><span class="formula-math">\( \mathrm{Monthly\ Value} = \mathrm{Annual\ Average\ Value} \times \mathrm{Normalized\ Monthly\ Factor} \)</span></div>
+      </div>
+      <table class="assumptions-table">
+        <thead>
+          <tr>
+            <th>Resource</th>
+            <th>Annual Scaling Factor</th>
+            <th>Basis</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>Utility Wind</td><td>37.0%</td><td><a href="https://atb.nrel.gov/electricity/2024b/land-based_wind" target="_blank" rel="noopener noreferrer">NREL ATB 2024b land-based wind</a></td></tr>
+          <tr><td>Utility Solar</td><td>19.55%</td><td><a href="https://developer.nrel.gov/docs/solar/pvwatts/v8/" target="_blank" rel="noopener noreferrer">NREL PVWatts v8</a> Austin one-axis tracking proxy</td></tr>
+          <tr><td>Local Solar</td><td>16.85%</td><td><a href="https://developer.nrel.gov/docs/solar/pvwatts/v8/" target="_blank" rel="noopener noreferrer">NREL PVWatts v8</a> Austin fixed-roof proxy</td></tr>
+          <tr><td>Geothermal</td><td>64.6%</td><td><a href="https://www.eia.gov/electricity/annual/html/epa_04_08_b.html" target="_blank" rel="noopener noreferrer">EIA Electric Power Annual Table 4.08.B</a></td></tr>
+          <tr><td>Biomass</td><td>27.3%</td><td><a href="https://austinenergy.com/about/company-profile/environment/renewable-power-generation" target="_blank" rel="noopener noreferrer">Austin Energy Nacogdoches 105 MW biomass resource</a> with recent-output proxy</td></tr>
+          <tr><td>Gas (Baseload)</td><td>60.5%</td><td><a href="https://www.eia.gov/electricity/monthly/epm_table_grapher.php?lang=en&t=table_6_07_a" target="_blank" rel="noopener noreferrer">EIA Electric Power Monthly Table 6.07.A</a> combined cycle</td></tr>
+          <tr><td>Gas (Peaker)</td><td>13.9%</td><td><a href="https://www.eia.gov/electricity/monthly/epm_table_grapher.php?lang=en&t=table_6_07_a" target="_blank" rel="noopener noreferrer">EIA Electric Power Monthly Table 6.07.A</a> gas turbine</td></tr>
+          <tr><td>Coal</td><td>42.6%</td><td><a href="https://www.eia.gov/electricity/monthly/epm_table_grapher.php?lang=en&t=table_6_07_a" target="_blank" rel="noopener noreferrer">EIA Electric Power Monthly Table 6.07.A</a></td></tr>
+          <tr><td>Nuclear</td><td>90.8%</td><td><a href="https://www.eia.gov/electricity/annual/html/epa_04_08_b.html" target="_blank" rel="noopener noreferrer">EIA Electric Power Annual Table 4.08.B</a></td></tr>
+        </tbody>
+      </table>
+
+      <h4>2a. 24-hour reliability approach</h4>
+      <p>The 24-hour reliability chart uses a different lens. It asks what output may be available hour by hour on a hot August day, rather than how much energy a resource produces over a full year. For example, a 100 MW solar resource does not produce 100 MW every hour of the day. It may be near zero before sunrise, rise toward midday, and then fall back toward zero in the evening. The daily chart therefore uses hourly availability profiles instead of annual energy factors. Wind works the same way: the question is how much wind output is likely to be available in each hour, not what its annual average happens to be.</p>
+      <p>The exact hourly load, wind, solar, and import-support distributions used in that stress test are described later in Sections 8 and 9. This section is only meant to distinguish the daily reliability lens from the annual and monthly energy views.</p>
+      <div class="formula-block">
+        <div class="formula-line"><span class="formula-label">Reliability reshaping</span><span class="formula-math">\( \mathrm{Hourly\ Value}(h) = \mathrm{Nameplate\ MW} \times \mathrm{Hourly\ Profile}(h) \)</span></div>
+      </div>
+
+      <h4>2b. Import allowance in the reliability model</h4>
+      <p>The model includes an <strong>Import Allowance</strong> input to represent outside power that Austin Energy can plausibly rely on in stressed hours. This is not treated as owned generation. It is a capped market-support layer that sits after local generation, battery discharge, and gas peakers. In the charts, it appears separately from Austin Energy resources so imported support is visually distinct from owned or contracted supply.</p>
+        <p>The current default is <strong>700 MW</strong>. This should be read as an <em>effective stressed-hour import allowance</em>, not as a literal transmission rating. In reality, Austin's usable outside support depends on both transmission into the load zone and whether ERCOT has power available to deliver during a tight hour. The model compresses those effects into one editable allowance so the user can test how much outside support is assumed to be dependable.</p>
+        <p>The <strong>700 MW</strong> default is a calibrated planning placeholder rather than a published Austin Energy transfer limit. It was chosen because Austin Energy and related city materials point to the same general scale: a recent Austin transmission discussion described roughly a <strong>700 MW local generation gap</strong> after Decker steam-unit retirements, while the Round II portfolio materials treated a <strong>+250 MW import-capacity increase</strong> as a meaningful but incremental reliability improvement in portfolios 14-16. In other words, the model uses 700 MW as a reasonable stressed-hour outside-support baseline that is large enough to matter, but still small enough that a further 250 MW increase changes outcomes. Sources: <a href="https://bandc.crccheck.com/electric-utility-commission/468531-item-12-presentation-transmission-discussion/" target="_blank" rel="noopener noreferrer">EUC transmission discussion</a> and <a href="https://services.austintexas.gov/edims/document.cfm?id=439557" target="_blank" rel="noopener noreferrer">Round II Modeling Results</a>.</p>
+        <div class="formula-block">
+        <div class="formula-line"><span class="formula-label">Import dispatch</span><span class="formula-math">\( \mathrm{Imports}(h) = \min(\mathrm{Import\ Allowance}, \mathrm{Shortfall\ After\ Local\ Resources}(h)) \)</span></div>
+        <div class="formula-line"><span class="formula-label">Residual risk</span><span class="formula-math">\( \mathrm{Residual\ Shortfall}(h) = \max(0, \mathrm{Load}(h) - \mathrm{Local\ Supply}(h) - \mathrm{Imports}(h)) \)</span></div>
+      </div>
+      <p>In the annual and monthly charts, the same allowance is shown as a capped market-support layer ahead of any residual deficit. In the peak-day chart, it is the last supply layer used before an hour counts as residual deficit or risk.</p>
+
+      <h4>3. Where the default price assumptions come from</h4>
+      <p>The default generation-price assumptions in the landed-cost table are based on midpoint values from <a href="https://www.lazard.com/media/uounhon4/lazards-lcoeplus-june-2025.pdf" target="_blank" rel="noopener noreferrer">Lazard's June 2025 LCOE+ Version 18.0</a> where the model has a reasonably close technology match. Battery defaults are based on Lazard's June 2025 LCOS Version 10.0 utility-scale standalone 4-hour storage range in $/kW-year, referenced from <a href="https://www.lazard.com/research-insights/2025-levelized-cost-of-energyplus/" target="_blank" rel="noopener noreferrer">Lazard's 2025 LCOE+ overview page</a>. Geothermal is treated separately: because an Austin-focused buildout would likely rely on deeper EGS-style geothermal rather than conventional western hydrothermal, the model uses a higher planning placeholder informed by <a href="https://www.nrel.gov/geothermal/2025-us-geothermal-market-report" target="_blank" rel="noopener noreferrer">NREL's 2025 Geothermal Market Report</a>, which says EGS remains on a declining path toward hydrothermal-like costs rather than already matching them today. Local solar and local battery are treated differently from utility-side resources: their default utility cost is set to zero because they are modeled as private purchases rather than Austin Energy spending. These are still planning defaults for scenario testing, not Austin Energy's actual contract prices, and every value remains editable in the table.</p>
+      <p>The current default model values are: nuclear $34/MWh, biomass $0/MWh placeholder, gas baseload $32/MWh, gas peaker $109/MWh, coal $73/MWh, existing wind $62/MWh, new wind $62/MWh, existing solar $58/MWh, new solar $58/MWh, local solar $0/MWh, geothermal $140/MWh, utility battery $238k/MW-year, and local battery $0k/MW-year. The model also keeps energy efficiency at $25/MWh and demand response at $25/MWh. A default TCOS adder of $40/MWh is applied to eligible remote resources unless overridden in the table.</p>
+      <div class="formula-block">
+        <div class="formula-line"><span class="formula-label">Landed cost</span><span class="formula-math">\( \mathrm{Landed\ Cost} = \mathrm{Base\ Price} + \mathrm{TCOS} \)</span></div>
+        <div class="formula-line"><span class="formula-label">Energy resource cost</span><span class="formula-math">\( \mathrm{Annual\ Cost\ (\$M)} = \mathrm{TWh} \times \mathrm{Landed\ \$/MWh} \)</span></div>
+        <div class="formula-line"><span class="formula-label">Battery cost</span><span class="formula-math">\( \mathrm{Annual\ Cost\ (\$M)} = \dfrac{\mathrm{MW} \times (\mathrm{\$k/MW\text{-}yr})}{1000} \)</span></div>
+      </div>
+      <p>The current Lazard mapping used in the model is: gas baseload to operating gas combined cycle, gas peaker to operating gas peaking, nuclear to operating U.S. nuclear, coal to operating coal, utility wind to onshore wind, utility solar to utility solar PV, and utility battery to utility-scale standalone 4-hour LCOS. Geothermal is not using the generic Lazard geothermal row; it uses a higher deep-geothermal planning placeholder informed by NREL's geothermal market report. Local solar and local battery are intentionally excluded from Austin Energy utility-side cost totals by default, so their base-cost defaults are zero unless the user chooses to model a utility-side incentive or program cost explicitly.</p>
+
+      <h4>3a. Buy/sell market price simulation</h4>
+      <p>The model now treats market purchases and market sales as time-shaped rather than flat annual prices. This matters because a resource can look cheap on annual energy alone while still creating an unfavorable trading pattern over the year. A solar-heavy portfolio, for example, may export more power in sunny midday hours when sale values tend to be weaker, while still importing during late-day and high-load hours when purchase values tend to be stronger.</p>
+      <p>The current implementation uses actual 2025 ERCOT Austin load-zone day-ahead prices averaged into a 12-by-24 month-hour matrix. For each month and hour, the model compares supply to load, prices imports at that month's average Austin load-zone price for that hour, and prices exports at the same market price for that hour. That means a solar-heavy portfolio can still earn less on exports if those exports land in lower-priced midday cells, while a short portfolio can still pay more if its imports land in stronger late-day or summer cells. Sources: <a href="https://www.ercot.com/mktinfo/prices/index.html" target="_blank" rel="noopener noreferrer">ERCOT Market Prices</a>, <a href="https://www.ercot.com/content/cdr/html/20250301_dam_spp.html" target="_blank" rel="noopener noreferrer">ERCOT DAM Settlement Point Prices Display</a>, and <a href="https://www.ercot.com/content/cdr/html/20250818_real_time_spp.html" target="_blank" rel="noopener noreferrer">ERCOT Real-Time Settlement Point Prices Display</a>.</p>
+      <div class="formula-block">
+        <div class="formula-line"><span class="formula-label">Hourly net market position</span><span class="formula-math">\( \mathrm{Net}(m,h) = \mathrm{Load}(m,h) - \mathrm{Supply}(m,h) \)</span></div>
+        <div class="formula-line"><span class="formula-label">Market purchase cost</span><span class="formula-math">\( \sum_{m,h} \max(0,\mathrm{Net}(m,h)) \times \mathrm{BuyPrice}(m,h) \)</span></div>
+        <div class="formula-line"><span class="formula-label">Market sale revenue</span><span class="formula-math">\( \sum_{m,h} \max(0,-\mathrm{Net}(m,h)) \times \mathrm{SellPrice}(m,h) \)</span></div>
+      </div>
+      <p><strong>ERCOT 2025 Austin load-zone month-hour price matrix ($/MWh)</strong>: the model uses the full 12 x 24 matrix below. Rows are months from January through December. Columns are hours ending 1 through 24.</p>
+      <div class="assumptions-table-wrap">
+        <table class="assumptions-table assumptions-matrix-table">
+          <thead>
+            <tr>
+              <th>Month</th>
+              <th>HE1</th>
+              <th>HE2</th>
+              <th>HE3</th>
+              <th>HE4</th>
+              <th>HE5</th>
+              <th>HE6</th>
+              <th>HE7</th>
+              <th>HE8</th>
+              <th>HE9</th>
+              <th>HE10</th>
+              <th>HE11</th>
+              <th>HE12</th>
+              <th>HE13</th>
+              <th>HE14</th>
+              <th>HE15</th>
+              <th>HE16</th>
+              <th>HE17</th>
+              <th>HE18</th>
+              <th>HE19</th>
+              <th>HE20</th>
+              <th>HE21</th>
+              <th>HE22</th>
+              <th>HE23</th>
+              <th>HE24</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td>Jan</td><td>27.11</td><td>25.64</td><td>25.61</td><td>26.62</td><td>28.32</td><td>37.08</td><td>53.83</td><td>61.52</td><td>41.77</td><td>31.05</td><td>26.46</td><td>22.72</td><td>20.99</td><td>19.54</td><td>18.29</td><td>19.13</td><td>26.31</td><td>44.85</td><td>48.88</td><td>41.48</td><td>37.72</td><td>32.69</td><td>29.42</td><td>27.37</td></tr>
+            <tr><td>Feb</td><td>28.06</td><td>25.88</td><td>25.57</td><td>25.85</td><td>28.69</td><td>41.00</td><td>72.23</td><td>74.72</td><td>45.12</td><td>28.45</td><td>23.42</td><td>21.34</td><td>19.42</td><td>18.79</td><td>18.07</td><td>17.95</td><td>21.20</td><td>36.01</td><td>48.35</td><td>43.28</td><td>41.58</td><td>34.04</td><td>31.37</td><td>29.07</td></tr>
+            <tr><td>Mar</td><td>29.95</td><td>27.45</td><td>26.46</td><td>26.19</td><td>27.98</td><td>33.59</td><td>41.04</td><td>43.39</td><td>31.31</td><td>20.72</td><td>17.48</td><td>16.89</td><td>17.06</td><td>18.47</td><td>20.33</td><td>23.11</td><td>25.86</td><td>33.58</td><td>50.47</td><td>75.15</td><td>62.37</td><td>46.39</td><td>37.17</td><td>32.50</td></tr>
+            <tr><td>Apr</td><td>29.41</td><td>26.49</td><td>24.96</td><td>24.51</td><td>25.89</td><td>30.75</td><td>36.24</td><td>35.67</td><td>24.47</td><td>18.70</td><td>16.70</td><td>16.59</td><td>17.87</td><td>20.23</td><td>24.53</td><td>30.88</td><td>38.21</td><td>46.47</td><td>58.52</td><td>87.01</td><td>83.08</td><td>57.73</td><td>43.88</td><td>33.11</td></tr>
+            <tr><td>May</td><td>29.89</td><td>27.17</td><td>25.54</td><td>24.81</td><td>25.25</td><td>27.28</td><td>30.83</td><td>26.86</td><td>20.92</td><td>17.89</td><td>17.83</td><td>19.86</td><td>23.54</td><td>31.38</td><td>38.86</td><td>49.87</td><td>58.43</td><td>59.45</td><td>70.00</td><td>106.38</td><td>100.77</td><td>63.29</td><td>43.18</td><td>32.17</td></tr>
+            <tr><td>Jun</td><td>27.96</td><td>25.32</td><td>23.78</td><td>23.36</td><td>23.98</td><td>26.14</td><td>27.21</td><td>23.90</td><td>19.03</td><td>17.71</td><td>18.75</td><td>20.88</td><td>24.17</td><td>28.82</td><td>32.55</td><td>36.25</td><td>39.67</td><td>40.45</td><td>46.46</td><td>71.98</td><td>75.97</td><td>57.13</td><td>40.54</td><td>31.62</td></tr>
+            <tr><td>Jul</td><td>29.41</td><td>27.02</td><td>25.25</td><td>24.30</td><td>24.60</td><td>26.11</td><td>27.52</td><td>24.54</td><td>20.42</td><td>19.60</td><td>20.89</td><td>23.50</td><td>27.57</td><td>31.28</td><td>35.09</td><td>38.78</td><td>42.43</td><td>43.75</td><td>53.78</td><td>88.06</td><td>92.69</td><td>68.54</td><td>43.43</td><td>33.49</td></tr>
+            <tr><td>Aug</td><td>30.13</td><td>27.57</td><td>26.20</td><td>25.28</td><td>25.65</td><td>27.56</td><td>30.74</td><td>28.33</td><td>21.86</td><td>20.52</td><td>22.60</td><td>28.36</td><td>40.10</td><td>49.22</td><td>57.12</td><td>64.12</td><td>68.62</td><td>73.30</td><td>89.60</td><td>104.87</td><td>94.42</td><td>68.38</td><td>46.13</td><td>35.29</td></tr>
+            <tr><td>Sep</td><td>26.74</td><td>24.78</td><td>23.58</td><td>23.01</td><td>23.37</td><td>24.67</td><td>27.25</td><td>26.83</td><td>20.62</td><td>17.66</td><td>18.40</td><td>20.59</td><td>26.26</td><td>32.97</td><td>39.57</td><td>47.08</td><td>52.16</td><td>58.57</td><td>76.45</td><td>76.22</td><td>57.97</td><td>43.42</td><td>33.96</td><td>28.44</td></tr>
+            <tr><td>Oct</td><td>28.87</td><td>26.99</td><td>25.96</td><td>25.64</td><td>25.81</td><td>28.08</td><td>32.16</td><td>34.83</td><td>25.06</td><td>19.09</td><td>19.38</td><td>22.84</td><td>29.05</td><td>38.28</td><td>46.56</td><td>56.29</td><td>61.07</td><td>72.78</td><td>86.89</td><td>74.18</td><td>53.47</td><td>40.67</td><td>33.66</td><td>28.54</td></tr>
+            <tr><td>Nov</td><td>31.35</td><td>29.56</td><td>29.03</td><td>29.24</td><td>30.70</td><td>35.53</td><td>39.22</td><td>36.90</td><td>25.61</td><td>23.21</td><td>23.44</td><td>25.74</td><td>29.50</td><td>35.22</td><td>40.09</td><td>45.65</td><td>73.64</td><td>90.26</td><td>72.24</td><td>61.84</td><td>50.00</td><td>44.02</td><td>40.50</td><td>34.87</td></tr>
+            <tr><td>Dec</td><td>34.78</td><td>34.20</td><td>33.29</td><td>33.54</td><td>36.21</td><td>43.99</td><td>52.07</td><td>53.02</td><td>39.66</td><td>30.06</td><td>27.09</td><td>24.90</td><td>22.80</td><td>21.94</td><td>21.59</td><td>23.70</td><td>38.11</td><td>54.83</td><td>52.45</td><td>48.81</td><td>45.21</td><td>41.46</td><td>38.81</td><td>33.65</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>This section is still a simplified market model, not a full ERCOT nodal production-cost model. It uses an average month-hour price matrix rather than every historical interval, but it does price imports and exports directly from real 2025 Austin load-zone market data instead of from a manual base-price assumption.</p>
+
+      <h4>4. Existing wind retirements and contract end dates</h4>
+      <p>Existing utility wind is modeled from a project list with MW and contract-end years. The rule used in the code is simple: a project is treated as active through its listed expiration year and drops out beginning the following year. This means the model does not phase down a project inside its final contract year; it remains fully available through that year and then retires all at once in the next year.</p>
+      <p>These project-level assumptions come from Austin Energy planning materials, especially the <a href="https://austinenergy.com/-/media/project/websites/austinenergy/about/pdfs/austin-energy-resource-generation-and-climate-protection-plan-2025--appendix.pdf?hash=7B8131F1D8C6BA08082F603EE1B6D99F&rev=f383478051da463f955d4d56a93054e3&sc_lang=en" target="_blank" rel="noopener noreferrer">Austin Energy 2035 planning appendix</a> and related <a href="https://services.austintexas.gov/edims/document.cfm?id=423219" target="_blank" rel="noopener noreferrer">City of Austin 2035 plan materials</a>.</p>
+      <table class="assumptions-table">
+        <thead>
+          <tr>
+            <th>Project</th>
+            <th>MW</th>
+            <th>Contract End</th>
+            <th>Modeled Through</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>Whirlwind Energy Center</td><td>59.8</td><td>2027</td><td>2027</td></tr>
+          <tr><td>Hackberry Wind Project</td><td>165.6</td><td>2023</td><td>2023</td></tr>
+          <tr><td>Los Vientos II</td><td>201.6</td><td>2037</td><td>2037</td></tr>
+          <tr><td>Whitetail</td><td>92.3</td><td>2037</td><td>2037</td></tr>
+          <tr><td>Los Vientos III</td><td>200</td><td>2040</td><td>2040</td></tr>
+          <tr><td>Jumbo Road</td><td>299.7</td><td>2033</td><td>2033</td></tr>
+          <tr><td>Los Vientos IV</td><td>200</td><td>2041</td><td>2041</td></tr>
+          <tr><td>Karankawa</td><td>206.64</td><td>2034</td><td>2034</td></tr>
+          <tr><td>Raymond</td><td>200</td><td>2032</td><td>2032</td></tr>
+          <tr><td>Gulf Wind</td><td>170</td><td>2041</td><td>2041</td></tr>
+        </tbody>
+      </table>
+      <div class="formula-block">
+        <div class="formula-line"><span class="formula-label">Asset status</span><span class="formula-math">\( \mathrm{Active\ in\ year\ } Y \iff Y \le \mathrm{expiration\ year} \)</span></div>
+        <div class="formula-line"><span class="formula-label">Existing wind</span><span class="formula-math">\( \mathrm{Wind\ TWh}(Y) = \dfrac{\sum(\mathrm{active\ MW}) \times 8760 \times 0.35}{1{,}000{,}000} \)</span></div>
+      </div>
+      <p>This is why the existing-wind line steps down over time. It is not driven by a generic decay curve. It is driven by specific project end dates built into the fleet list.</p>
+
+      <h4>5. Existing utility solar retirements and degradation</h4>
+      <p>Existing utility solar uses a similar project list with contract-end years, but the model also applies annual degradation to solar output. The current solar degradation assumption is 0.5% per year. Existing solar projects remain in the fleet through their expiration year, but their output declines slightly with age every year.</p>
+      <p>These project-level assumptions come from Austin Energy planning materials, especially the <a href="https://austinenergy.com/-/media/project/websites/austinenergy/about/pdfs/austin-energy-resource-generation-and-climate-protection-plan-2025--appendix.pdf?hash=7B8131F1D8C6BA08082F603EE1B6D99F&rev=f383478051da463f955d4d56a93054e3&sc_lang=en" target="_blank" rel="noopener noreferrer">Austin Energy 2035 planning appendix</a>.</p>
+      <table class="assumptions-table">
+        <thead>
+          <tr>
+            <th>Project</th>
+            <th>MW</th>
+            <th>Contract End</th>
+            <th>Modeled Through</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>Webberville Solar Project</td><td>30</td><td>2036</td><td>2036</td></tr>
+          <tr><td>Roserock</td><td>157.5</td><td>2036</td><td>2036</td></tr>
+          <tr><td>East Pecos (Bootleg)</td><td>118.5</td><td>2031</td><td>2031</td></tr>
+          <tr><td>Upton County (SPTX12B1)</td><td>157.5</td><td>2042</td><td>2042</td></tr>
+          <tr><td>Waymark</td><td>178.5</td><td>2043</td><td>2043</td></tr>
+          <tr><td>East Blacklands</td><td>144</td><td>2036</td><td>2036</td></tr>
+          <tr><td>SE Aragon</td><td>180</td><td>2036</td><td>2036</td></tr>
+        </tbody>
+      </table>
+      <div class="formula-block">
+        <div class="formula-line"><span class="formula-label">Solar degradation</span><span class="formula-math">\( \mathrm{Output\ Factor}(A) = (1 - 0.005)^A \)</span></div>
+        <div class="formula-line"><span class="formula-label">Existing solar</span><span class="formula-math">\( \mathrm{Solar\ TWh}(i) = \dfrac{\mathrm{active\ MW}(i) \times \mathrm{Output\ Factor}(i) \times 8760 \times 0.25}{1{,}000{,}000} \)</span></div>
+      </div>
+
+      <h4>6. How 2035 build targets are turned into annual additions</h4>
+      <p>The sliders are interpreted as 2035 end-state targets. The model then works backward to determine the constant annual build needed to reach that 2035 level. There are nine modeled build years in the current logic. New build tranches are assumed to start producing the year after they are built, which creates a one-year lag in the annual outlook.</p>
+      <p>For utility wind, the model subtracts surviving existing wind in 2035 from the selected 2035 wind target, then spreads the remaining requirement evenly over the build years. For utility solar, the model subtracts surviving existing solar in 2035 and then adjusts the annual build calculation to account for solar degradation across build vintages. For local solar, the baseline starts at 188 MW and only additions above that level are spread across build years. Geothermal starts from zero. Utility battery and local battery are treated as additions above the current baseline/default settings.</p>
+      <div class="formula-block">
+        <div class="formula-line"><span class="formula-label">New wind needed</span><span class="formula-math">\( \max(0,\ \mathrm{wind\ target}_{2035} - \mathrm{surviving\ existing\ wind}_{2035}) \)</span></div>
+        <div class="formula-line"><span class="formula-label">Wind annual build</span><span class="formula-math">\( \mathrm{Wind\ Annual\ Build} = \dfrac{\mathrm{new\ wind\ needed}}{\mathrm{build\ years}} \)</span></div>
+        <div class="formula-line"><span class="formula-label">New utility solar needed</span><span class="formula-math">\( \max(0,\ \mathrm{solar\ target}_{2035} - \mathrm{surviving\ existing\ solar}_{2035}) \)</span></div>
+        <div class="formula-line"><span class="formula-label">Solar annual build</span><span class="formula-math">\( \mathrm{Solar\ Annual\ Build} = \dfrac{\mathrm{new\ solar\ needed}}{\sum(\mathrm{degradation\text{-}adjusted\ vintage\ factors})} \)</span></div>
+        <div class="formula-line"><span class="formula-label">Local solar annual build</span><span class="formula-math">\( \mathrm{Local\ Solar\ Annual\ Build} = \dfrac{\mathrm{target}_{2035} - 188}{\mathrm{build\ years}} \)</span></div>
+      </div>
+
+      <h4>7. Seasonal distributions used in the charts</h4>
+      <p>The monthly seasonality used in the top chart's optional seasonal mode and in the 2035 monthly chart is split by resource type. Load seasonality currently uses an ERCOT-wide monthly proxy derived from monthly Net Energy for Load, averaging the 2024 and 2025 actual values from <a href="https://www.ercot.com/files/docs/2025/02/07/DemandandEnergy2025-for-Corp-Comms.xlsx" target="_blank" rel="noopener noreferrer">ERCOT's monthly demand and energy workbook</a>. Wind seasonality was derived from 2025 ERCOT monthly generation by fuel in <a href="https://www.ercot.com/files/docs/2025/02/07/IntGenbyFuel2025.xlsx" target="_blank" rel="noopener noreferrer">ERCOT's monthly generation-by-fuel workbook</a>. Monthly solar seasonality still uses the Austin solar-geometry method: the model evaluates a representative mid-month day for each month, sums the 24-hour solar shape, and then normalizes the resulting monthly factors so the hours-weighted annual average equals 1.0. That means the seasonal factors reshape the year while preserving the annual total.</p>
+      <div class="formula-block">
+        <div class="formula-line"><span class="formula-label">Monthly shaping</span><span class="formula-math">\( \mathrm{Monthly\ Value} = \mathrm{Annual\ Average\ Value} \times \mathrm{Normalized\ Monthly\ Factor} \)</span></div>
+      </div>
+      <p>That means monthly load and wind remain ERCOT-based shape proxies, while monthly solar uses an Austin-geometry shape. The selected-year daily stress test uses a separate hourly method described in Section 8.</p>
+
+      <h4>8. Daily distributions used in the selected-year reliability stress test</h4>
+      <p>The reliability chart is still a single representative 24-hour summer stress test, not a full production-cost model and not a full year of hourly simulations. The peak-load level uses Austin Energy's reported summer 2024 peak demand of 3,135 MW as the base value, grown forward with the model's load-growth slider to the year selected above the chart. That 3,135 MW value is treated as the peak-hour load anchor, not as a day-average level. The hourly load shape itself uses an ERCOT proxy from <a href="https://www.ercot.com/files/docs/2025/02/11/Native_Load_2025.zip" target="_blank" rel="noopener noreferrer">ERCOT's 2025 hourly native load archive</a>. The model identifies the top 10 August 2025 ERCOT peak-load days, averages each hour across those days, and then normalizes the resulting 24-hour load series so its own maximum equals 1.0 before applying the Austin Energy peak. That means the reliability chart uses an Austin Energy peak-load level with an ERCOT hourly shape proxy.</p>
+        <p>Solar is no longer using the ERCOT operational solar curve in this daily stress test. <strong>Utility solar</strong> now uses a capacity-weighted Austin Energy fleet profile built from the published utility-solar project list and approximate project locations. The model computes an August solar-geometry curve for each site, combines those curves by project MW, and uses the resulting location-weighted fleet bell curve directly. <strong>Local solar</strong> uses an Austin-centered August solar-geometry curve. This produces a broader bell-curve-style daily solar shape that is tied to Austin Energy's own asset geography rather than ERCOT's aggregate operational fleet behavior. Source: <a href="https://austinenergy.com/about/company-profile/environment/renewable-power-generation" target="_blank" rel="noopener noreferrer">Austin Energy renewable project list</a>.</p>
+        <p>The model treats nuclear, biomass, baseload gas, coal, and geothermal as flat within the day. Wind still uses the ERCOT planning-profile-based August hourly availability curve, while solar now uses Austin Energy-specific geometry for utility assets and Austin-local geometry for local solar. So the daily chart mixes ERCOT-derived wind availability with Austin Energy-specific solar availability.</p>
+        <div class="formula-block">
+          <div class="formula-line"><span class="formula-label">Hourly load</span><span class="formula-math">\( \mathrm{Load}(h) = \mathrm{Peak}_{2035} \times \mathrm{load\ profile}(h) \)</span></div>
+          <div class="formula-line"><span class="formula-label">Hourly utility solar</span><span class="formula-math">\( \mathrm{Utility\ Solar}(h) = \mathrm{utility\ solar\ MW} \times \mathrm{AE\ fleet\ solar\ profile}(h) \)</span></div>
+          <div class="formula-line"><span class="formula-label">Hourly local solar</span><span class="formula-math">\( \mathrm{Local\ Solar}(h) = \mathrm{local\ solar\ MW} \times \mathrm{Austin\ local\ solar\ profile}(h) \)</span></div>
+            <div class="formula-line"><span class="formula-label">Hourly wind</span><span class="formula-math">\( \mathrm{Wind}(h) = \mathrm{wind\ MW} \times \mathrm{Aug\ Wind\ Availability}(h) \)</span></div>
+          </div>
+
+      <h4>9. Battery treatment</h4>
+      <p>Batteries are modeled as four-hour storage. In other words, every 1 MW of battery adds 4 MWh of storage energy capacity in the reliability model. The model uses a simple state-of-charge simulation to charge during surplus hours and discharge during deficit hours. It does not currently include round-trip efficiency losses, battery degradation, or detailed charging constraints tied to a specific charging source. The default utility-scale battery baseline is 100 MW, based on Austin Energy's announced 2025 battery storage deal. The default local-battery baseline remains 0 MW because a current public Austin Energy aggregate for customer-sited battery capacity was not identified.</p>
+      <div class="formula-block">
+        <div class="formula-line"><span class="formula-label">Battery duration</span><span class="formula-math">\( \mathrm{Energy\ Capacity} = \mathrm{Battery\ MW} \times 4\ \mathrm{hours} \)</span></div>
+      </div>
+      <p>In the cost model, batteries are not priced on annual TWh output. They are priced as annual capacity-style resources using $k/MW-year.</p>
+
+      <h4>10. Gap, surplus, and reliability margin treatment</h4>
+      <p>Whenever annual supply is below annual load, the difference is shown as a deficit or market gap. In the 2035 landed-cost table and buildout table, that deficit is priced through the ERCOT Austin load-zone month-hour market matrix plus any applicable TCOS. If annual supply is above annual load, the model shows surplus sales revenue using the same market matrix. In the reliability chart, risk hours are hours where supply falls short of load by more than 10 MW. The margin KPI uses the minimum hourly value of (supply minus load) divided by load.</p>
+      <div class="formula-block">
+        <div class="formula-line"><span class="formula-label">Annual gap</span><span class="formula-math">\( \max(0,\ \mathrm{annual\ load} - \mathrm{annual\ supply}) \)</span></div>
+        <div class="formula-line"><span class="formula-label">Risk hour</span><span class="formula-math">\( \mathrm{Hourly\ Load} > \mathrm{Hourly\ Supply} + 10\ \mathrm{MW} \)</span></div>
+        <div class="formula-line"><span class="formula-label">Margin</span><span class="formula-math">\( \mathrm{Margin\ \%} = \min_h\left(\dfrac{\mathrm{supply}(h)-\mathrm{load}(h)}{\mathrm{load}(h)}\right)\times 100 \)</span></div>
+      </div>
+
+      <h4>11. Important interpretation notes</h4>
+      <p>The model is intentionally transparent and scenario-oriented. It is not a full production-cost model, not a full capacity-expansion model, and not a utility budgeting system. The cost table uses editable planning assumptions. The monthly profiles use ERCOT-level proxies. The reliability test uses one representative day rather than many weather years. No specific Austin Energy gas-plant retirement dates between 2025 and 2036 are hard-coded; the model only reflects the user-selected gas levels plus the broader public planning context in Austin Energy's <a href="https://services.austintexas.gov/edims/document.cfm?id=423219" target="_blank" rel="noopener noreferrer">2035 plan materials</a> and current <a href="https://austinenergy.com/about/company-profile/electric-system/power-plants" target="_blank" rel="noopener noreferrer">power plants overview</a>.</p>
+    </div>
+  </details>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js"></script>
+<script>
+  window.MathJax = {
+    tex: {
+      inlineMath: [['\\(', '\\)']],
+    },
+    chtml: {
+      scale: 1.02,
+    },
+  };
+</script>
+<script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
