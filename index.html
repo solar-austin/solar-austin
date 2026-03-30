@@ -61,10 +61,10 @@
       <div class="row">
         <div class="row-head">
           <span class="swatch" style="background: #C9852F"></span>
-          <span class="lbl has-tooltip" title="Total local solar power in 2035 (MW). Annual additions are calculated versus the 2025 baseline of 188 MW. Default target assumes 25 MW/year of added local solar through 2035.">Local Solar</span>
+          <span class="lbl has-tooltip" title="Total local solar power in 2035 (MW). Annual additions are calculated versus the current installed baseline of 189 MW.">Local Solar</span>
         </div>
-        <div class="slider-wrap"><input type="range" id="p_dist_solar" min="188" max="3000" value="438" data-default="438"></div>
-        <span class="val" id="v_dist_solar">438 MW</span>
+        <div class="slider-wrap"><input type="range" id="p_dist_solar" min="0" max="3000" value="189" data-default="189"></div>
+        <span class="val" id="v_dist_solar">189 MW</span>
       </div>
       <div class="row">
         <div class="row-head">
@@ -407,7 +407,7 @@
           <tr><td>Biomass</td><td>105 MW</td><td>Current Nacogdoches biomass capacity</td></tr>
           <tr><td>Utility Wind</td><td>1,796 MW</td><td>Current published Austin Energy wind portfolio</td></tr>
           <tr><td>Utility Solar</td><td>806 MW</td><td>Existing utility-solar baseline used by the model's contract logic</td></tr>
-          <tr><td>Local Solar</td><td>438 MW</td><td>Planning default based on 188 MW baseline plus 25 MW/year</td></tr>
+          <tr><td>Local Solar</td><td>189 MW</td><td>Current installed distributed solar baseline (ERCOT)</td></tr>
           <tr><td>Gas (Baseload)</td><td>595 MW</td><td>Current Sand Hill local gas capacity proxy</td></tr>
           <tr><td>Gas (Peaker)</td><td>205 MW</td><td>Current Decker/Mueller peaker proxy</td></tr>
         </tbody>

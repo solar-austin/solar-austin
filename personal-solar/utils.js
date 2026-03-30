@@ -71,42 +71,6 @@ function parseAddressLocation(address) {
   };
 }
 
-function getInstallCostBenchmark(location) {
-  const stateCode = normalizeStateCode(location?.stateCode);
-  if (!installCostLookup || !stateCode) return null;
-
-  const thresholds = installCostLookup.thresholds || {};
-  const stateEntry = installCostLookup.states?.[stateCode] || null;
-  if (stateEntry && (stateEntry.count || 0) >= (thresholds.stateMinSamples || 0)) {
-    return {
-      value: Number(stateEntry.medianCostPerKw),
-      source: `${stateCode} state median`,
-      count: stateEntry.count,
-    };
-  }
-
-  return null;
-}
-
-function applyInstallCostBenchmark(benchmark) {
-  if (!benchmark || !Number.isFinite(benchmark.value)) return false;
-  if (APP_MODE === 'austin_energy') return false;
-  const input = document.getElementById('installCost');
-  if (!input) return false;
-  const min = Number(input.min);
-  const max = Number(input.max);
-  const step = Number(input.step) || 50;
-  const clamped = clamp(benchmark.value, min, max);
-  const snapped = Math.round(clamped / step) * step;
-  input.value = String(snapped);
-  return true;
-}
-
-function syncInstallCostFromGoogleResult() {
-  if (!googleSolarResult?.installCostBenchmark) return false;
-  return applyInstallCostBenchmark(googleSolarResult.installCostBenchmark);
-}
-
 function sumBy(rows, key) {
   return rows.reduce((sum, row) => sum + row[key], 0);
 }
