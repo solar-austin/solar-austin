@@ -1,8 +1,23 @@
+function applyGoogleRoofResult() {
+  if (!googleSolarResult) return;
+
+  const productionInput = document.getElementById('productionPerKw');
+  const suggestedProduction = googleSolarResult.suggestedProductionPerKw;
+  if (productionInput && Number.isFinite(suggestedProduction)) {
+    const clampedProduction = Math.min(Number(productionInput.max), Math.max(Number(productionInput.min), suggestedProduction));
+    productionInput.value = String(Math.round(clampedProduction / 10) * 10);
+  }
+
+  applyInstallCostBenchmark(googleSolarResult.installCostBenchmark);
+  updateCalculator();
+}
+
 function updateCalculator() {
   try {
     setUiError('');
     syncPowerPlanUi();
     syncAustinDocs();
+    syncGreenButtonUi();
     updateValueLabels();
     updateDayMonthLabel();
 
@@ -16,7 +31,7 @@ function updateCalculator() {
       renderMonthlyChart(yearOne);
       renderGridFlowChart(yearOne);
       renderSizeMappingChart(inputs);
-      renderBillChart(yearOne);
+      renderBillChart(yearOne, tenYear);
     renderDailyChart(inputs);
     renderPaybackChart(tenYear);
   } catch (error) {
@@ -25,115 +40,17 @@ function updateCalculator() {
   }
 }
 
-function buildCandidateValues(min, max, step) {
-  const values = [];
-  for (let value = min; value <= max + (step / 2); value += step) {
-    values.push(Number(value.toFixed(4)));
-  }
-  return values;
-}
-
-function solveBestSystemSize() {
-  const systemSizeInput = document.getElementById('systemSize');
-  const batteryPowerInput = document.getElementById('batteryPower');
-  const min = Number(systemSizeInput.min);
-  const max = Number(systemSizeInput.max);
-  const step = Number(systemSizeInput.step) || 0.1;
-  const batteryMin = Number(batteryPowerInput.min);
-  const batteryMax = Number(batteryPowerInput.max);
-  const batteryStep = Number(batteryPowerInput.step) || 0.5;
-
-  let bestSize = min;
-  let bestBatteryPower = batteryMin;
-  let bestNetValue = Number.NEGATIVE_INFINITY;
-  const coarseSolarStep = Math.max(step, 1);
-  const coarseBatteryStep = Math.max(batteryStep, 2);
-  const coarseSolarValues = buildCandidateValues(min, max, coarseSolarStep);
-  const coarseBatteryValues = buildCandidateValues(batteryMin, batteryMax, coarseBatteryStep);
-
-  coarseSolarValues.forEach((candidateSize) => {
-    coarseBatteryValues.forEach((candidateBatteryPower) => {
-      const netValue = evaluateNetValue(candidateSize, candidateBatteryPower);
-      if (netValue > bestNetValue) {
-        bestNetValue = netValue;
-        bestSize = candidateSize;
-        bestBatteryPower = candidateBatteryPower;
-      }
-    });
-  });
-
-  const fineSolarMin = Math.max(min, bestSize - coarseSolarStep);
-  const fineSolarMax = Math.min(max, bestSize + coarseSolarStep);
-  const fineBatteryMin = Math.max(batteryMin, bestBatteryPower - coarseBatteryStep);
-  const fineBatteryMax = Math.min(batteryMax, bestBatteryPower + coarseBatteryStep);
-  const fineSolarValues = buildCandidateValues(fineSolarMin, fineSolarMax, step);
-  const fineBatteryValues = buildCandidateValues(fineBatteryMin, fineBatteryMax, batteryStep);
-
-  fineSolarValues.forEach((candidateSize) => {
-    fineBatteryValues.forEach((candidateBatteryPower) => {
-      const netValue = evaluateNetValue(candidateSize, candidateBatteryPower);
-      if (netValue > bestNetValue) {
-        bestNetValue = netValue;
-        bestSize = candidateSize;
-        bestBatteryPower = candidateBatteryPower;
-      }
-    });
-  });
-
-  systemSizeInput.value = String(Number(bestSize.toFixed(1)));
-  batteryPowerInput.value = String(Number(bestBatteryPower.toFixed(1)));
-  updateCalculator();
-}
-
 function resetInputs() {
   Object.entries(DEFAULTS).forEach(([fieldId, value]) => {
     const input = document.getElementById(fieldId);
     if (input) input.value = value;
   });
+  const heatingType = document.getElementById('heatingType');
+  if (heatingType) heatingType.value = 'gas';
+  const backupCheckbox = document.getElementById('backupGatewayEnabled');
+  if (backupCheckbox) backupCheckbox.checked = false;
+  syncGreenButtonUi();
   applyAppModeDefaults();
-  updateCalculator();
-}
-
-async function loadInstallCostLookup() {
-  try {
-    const response = await fetch('install-cost-lookup.json');
-    if (!response.ok) {
-      throw new Error(`Install cost lookup request failed with ${response.status}`);
-    }
-    installCostLookup = await response.json();
-    if (googleSolarRawPayload) {
-      googleSolarResult = summarizeGoogleSolarResult(googleSolarRawPayload);
-      renderGoogleLookupResult();
-    }
-  } catch (error) {
-    installCostLookup = null;
-  }
-}
-
-function applyGoogleRoofResult() {
-  if (!googleSolarResult) return;
-
-  const systemSizeInput = document.getElementById('systemSize');
-  const productionInput = document.getElementById('productionPerKw');
-  const suggestedSize = googleSolarResult.suggestedSystemSizeKw;
-  const suggestedProduction = googleSolarResult.suggestedProductionPerKw;
-
-  if (Number.isFinite(suggestedSize)) {
-    const clampedSize = Math.min(Number(systemSizeInput.max), Math.max(Number(systemSizeInput.min), suggestedSize));
-    systemSizeInput.value = String(Number(clampedSize.toFixed(1)));
-  }
-
-  if (Number.isFinite(suggestedProduction)) {
-    const clampedProduction = Math.min(Number(productionInput.max), Math.max(Number(productionInput.min), suggestedProduction));
-    productionInput.value = String(Math.round(clampedProduction / 10) * 10);
-  }
-
-  applyInstallCostBenchmark(googleSolarResult.installCostBenchmark);
-
-  const status = document.getElementById('googleLookupStatus');
-  status.textContent = googleSolarResult.installCostBenchmark
-    ? 'Applied Google roof size, production, and install cost benchmark.'
-    : 'Applied Google roof size and production.';
   updateCalculator();
 }
 
@@ -148,10 +65,83 @@ window.addEventListener('DOMContentLoaded', async () => {
     input.addEventListener('input', updateCalculator);
     input.addEventListener('change', updateCalculator);
   });
+  document.getElementById('backupGatewayEnabled').addEventListener('change', updateCalculator);
   document.getElementById('solveButton').addEventListener('click', solveBestSystemSize);
+  document.getElementById('solvePaybackButton').addEventListener('click', solveFastestPayback);
   document.getElementById('resetButton').addEventListener('click', resetInputs);
+  document.getElementById('btnUsageEstimated').addEventListener('click', () => {
+    importedMonthlyKwh = null;
+    importedMonthlyHourlyProfiles = null;
+    document.getElementById('greenButtonFile').value = '';
+    document.getElementById('greenButtonDropZone').classList.remove('has-error');
+    setUsageTab('estimated');
+    syncGreenButtonUi();
+    updateCalculator();
+  });
+  document.getElementById('btnUsageImport').addEventListener('click', () => setUsageTab('import'));
   document.getElementById('googleLookupButton').addEventListener('click', lookupGoogleRoof);
-  document.getElementById('googleApplyButton').addEventListener('click', applyGoogleRoofResult);
+
+  async function handleGreenButtonFile(file) {
+    const status = document.getElementById('greenButtonStatus');
+    const dropZone = document.getElementById('greenButtonDropZone');
+    try {
+      importedMonthlyKwh = await parseGreenButtonFile(file);
+      const totalKwh = Math.round(importedMonthlyKwh.reduce((s, v) => s + v, 0));
+      document.getElementById('importedDataSummary').textContent = `Green Button data · ${totalKwh.toLocaleString()} kWh/year`;
+      if (status) {
+        status.textContent = `Imported — ${totalKwh.toLocaleString()} kWh/year`;
+        status.classList.remove('is-error');
+        status.hidden = false;
+      }
+      dropZone.classList.remove('has-error');
+      syncGreenButtonUi();
+      updateCalculator();
+    } catch (err) {
+      importedMonthlyKwh = null;
+      importedMonthlyHourlyProfiles = null;
+      if (status) {
+        status.textContent = `Not recognized: ${err.message}`;
+        status.classList.add('is-error');
+        status.hidden = false;
+      }
+      dropZone.classList.add('has-error');
+      syncGreenButtonUi();
+    }
+  }
+
+  document.getElementById('greenButtonFile').addEventListener('change', async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    await handleGreenButtonFile(file);
+  });
+
+  const dropZone = document.getElementById('greenButtonDropZone');
+  const fileInput = document.getElementById('greenButtonFile');
+  dropZone.addEventListener('click', (e) => {
+    if (e.target.closest('#greenButtonClear')) return;
+    fileInput.click();
+  });
+  dropZone.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    dropZone.classList.add('drag-over');
+  });
+  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+  dropZone.addEventListener('drop', async (e) => {
+    e.preventDefault();
+    dropZone.classList.remove('drag-over');
+    const file = e.dataTransfer.files?.[0];
+    if (!file) return;
+    await handleGreenButtonFile(file);
+  });
+
+  document.getElementById('greenButtonClear').addEventListener('click', () => {
+    importedMonthlyKwh = null;
+    importedMonthlyHourlyProfiles = null;
+    document.getElementById('greenButtonFile').value = '';
+    document.getElementById('greenButtonDropZone').classList.remove('has-error');
+    syncGreenButtonUi(); // stays on import tab
+    updateCalculator();
+  });
   document.getElementById('googleAddress').addEventListener('keydown', (event) => {
     if (event.key === 'Enter') {
       event.preventDefault();

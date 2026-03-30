@@ -8,7 +8,9 @@ function buildYearModel(inputs, yearIndex = 0, startingCreditBalance = 0) {
   const buybackRate = inputs.buybackRate * rateFactor;
   let creditBalance = Math.max(0, startingCreditBalance);
   const monthlyRows = MONTHS.map((month, monthIndex) => {
-    const usage = annualUsage * MONTHLY_USAGE_PROFILE[monthIndex];
+    const usage = importedMonthlyKwh
+      ? importedMonthlyKwh[monthIndex]
+      : annualUsage * getActiveUsageProfile()[monthIndex];
     const solar = annualSolar * solarModel.monthlyProfile[monthIndex];
     const flow = simulateMonthlyFlow(
       usage,
@@ -16,8 +18,9 @@ function buildYearModel(inputs, yearIndex = 0, startingCreditBalance = 0) {
       monthIndex,
       MONTH_DAYS[monthIndex],
       inputs.batteryPower,
-      solarModel.hourlyProfiles[monthIndex]
-      );
+      solarModel.hourlyProfiles[monthIndex],
+      importedMonthlyHourlyProfiles?.[monthIndex] ?? null
+    );
       const isAustinEnergyMode = APP_MODE === 'austin_energy';
       let grossBillWithSolar = 0;
       let exportCredits = 0;
@@ -186,157 +189,6 @@ function buildIntervalSolarProfile(monthIndex, intervalsPerHour = DAY_CHART_INTE
   return normalizeProfile(rawProfile);
 }
 
-function getGoogleSolarDataset(rawPayload) {
-  const raw = rawPayload?.raw;
-  const solarPotential = raw?.solarPotential;
-  if (!solarPotential) return null;
-  if (GOOGLE_SOLAR_DATASET_CACHE.has(rawPayload)) {
-    return GOOGLE_SOLAR_DATASET_CACHE.get(rawPayload);
-  }
-
-  const roofSegments = Array.isArray(solarPotential.roofSegmentStats) ? solarPotential.roofSegmentStats : [];
-  const solarPanels = Array.isArray(solarPotential.solarPanels) ? solarPotential.solarPanels : [];
-  const panelCapacityWatts = Number(solarPotential.panelCapacityWatts) || 400;
-  const wholeRoofMedianSun = Number(solarPotential.wholeRoofStats?.sunshineQuantiles?.[5]) || 1500;
-  const latitudeDegrees = Number(raw?.center?.latitude ?? rawPayload?.request?.latitude ?? 30.2672);
-  const segmentEntries = roofSegments.map((segment, segmentIndex) => {
-    const sunshineStrength = clamp(
-      (Number(segment.stats?.sunshineQuantiles?.[5]) || wholeRoofMedianSun) / Math.max(1, wholeRoofMedianSun),
-      0.25,
-      1.4
-    );
-    const monthlyWeights = [];
-    const hourlyByMonth = MONTHS.map((_, monthIndex) => {
-      const rawShape = buildRoofSegmentSolarShape(segment, latitudeDegrees, monthIndex, 1)
-        .map((value) => value * sunshineStrength);
-      const total = rawShape.reduce((sum, value) => sum + value, 0);
-      monthlyWeights[monthIndex] = total;
-      return normalizeProfile(rawShape.every((value) => value === 0) ? buildMonthlySolarHourlyProfile(monthIndex) : rawShape);
-    });
-    const dailyByMonth = MONTHS.map((_, monthIndex) => {
-      const rawShape = buildRoofSegmentSolarShape(segment, latitudeDegrees, monthIndex, DAY_CHART_INTERVALS_PER_HOUR)
-        .map((value) => value * sunshineStrength);
-      return normalizeProfile(rawShape.every((value) => value === 0) ? buildIntervalSolarProfile(monthIndex) : rawShape);
-    });
-    return {
-      segmentIndex,
-      hourlyByMonth,
-      dailyByMonth,
-      monthlyWeights: normalizeProfile(monthlyWeights.every((value) => value === 0) ? MONTHLY_SOLAR_PROFILE : monthlyWeights),
-    };
-  });
-  const segmentsByIndex = new Map(segmentEntries.map((entry) => [entry.segmentIndex, entry]));
-  const sortedPanels = solarPanels
-    .map((panel) => ({
-      segmentIndex: Number(panel.segmentIndex),
-      yearlyEnergyDcKwh: Number(panel.yearlyEnergyDcKwh) || 0,
-    }))
-    .filter((panel) => Number.isFinite(panel.segmentIndex))
-    .sort((a, b) => b.yearlyEnergyDcKwh - a.yearlyEnergyDcKwh);
-  const segmentSummaries = roofSegments.map((segment, segmentIndex) => {
-    const segmentPanels = solarPanels.filter((panel) => Number(panel.segmentIndex) === segmentIndex);
-    const panelCount = segmentPanels.length;
-    const annualKwh = segmentPanels.reduce((sum, panel) => sum + (Number(panel.yearlyEnergyDcKwh) || 0), 0);
-    const avgPanelKwh = panelCount > 0 ? annualKwh / panelCount : 0;
-    const kwPerPanel = panelCapacityWatts / 1000;
-    return {
-      segmentIndex,
-      azimuthDegrees: Number(segment.azimuthDegrees) || 0,
-      pitchDegrees: Number(segment.pitchDegrees) || 0,
-      panelCount,
-      avgPanelKwh,
-      kwhPerKw: kwPerPanel > 0 ? avgPanelKwh / kwPerPanel : 0,
-    };
-  }).filter((row) => row.panelCount > 0).sort((a, b) => b.kwhPerKw - a.kwhPerKw);
-
-  const dataset = {
-    panelCapacityWatts,
-    maxRoofCapacityKw: (sortedPanels.length * panelCapacityWatts) / 1000,
-    sortedPanels,
-    segmentsByIndex,
-    segmentSummaries,
-  };
-  GOOGLE_SOLAR_DATASET_CACHE.set(rawPayload, dataset);
-  return dataset;
-}
-
-function allocateGooglePanels(dataset, systemSizeKw) {
-  if (!dataset || !dataset.sortedPanels.length) {
-    return {
-      panelFractionsBySegment: new Map(),
-      annualEnergyBySegment: new Map(),
-      annualSolarBase: 0,
-      exactPanels: 0,
-    };
-  }
-
-  const requestedPanels = clamp((systemSizeKw * 1000) / dataset.panelCapacityWatts, 0, dataset.sortedPanels.length);
-  const fullPanels = Math.floor(requestedPanels);
-  const fractionalPanel = requestedPanels - fullPanels;
-  const panelFractionsBySegment = new Map();
-  const annualEnergyBySegment = new Map();
-  let annualSolarBase = 0;
-
-  for (let index = 0; index < fullPanels; index += 1) {
-    const panel = dataset.sortedPanels[index];
-    annualSolarBase += panel.yearlyEnergyDcKwh;
-    panelFractionsBySegment.set(panel.segmentIndex, (panelFractionsBySegment.get(panel.segmentIndex) || 0) + 1);
-    annualEnergyBySegment.set(panel.segmentIndex, (annualEnergyBySegment.get(panel.segmentIndex) || 0) + panel.yearlyEnergyDcKwh);
-  }
-
-  if (fractionalPanel > 1e-6 && dataset.sortedPanels[fullPanels]) {
-    const panel = dataset.sortedPanels[fullPanels];
-    annualSolarBase += panel.yearlyEnergyDcKwh * fractionalPanel;
-    panelFractionsBySegment.set(panel.segmentIndex, (panelFractionsBySegment.get(panel.segmentIndex) || 0) + fractionalPanel);
-    annualEnergyBySegment.set(
-      panel.segmentIndex,
-      (annualEnergyBySegment.get(panel.segmentIndex) || 0) + (panel.yearlyEnergyDcKwh * fractionalPanel)
-    );
-  }
-
-  return {
-    panelFractionsBySegment,
-    annualEnergyBySegment,
-    annualSolarBase,
-    exactPanels: requestedPanels,
-  };
-}
-
-function combineSegmentProfiles(annualEnergyBySegment, segmentsByIndex, monthProfilesKey) {
-  const monthlyTotals = MONTHS.map(() => 0);
-  const monthlyProfiles = MONTHS.map((_, monthIndex) => {
-    const firstSegment = segmentsByIndex.values().next().value;
-    const length = firstSegment?.[monthProfilesKey]?.[monthIndex]?.length || (monthProfilesKey === 'dailyByMonth' ? 96 : 24);
-    return Array.from({ length }, () => 0);
-  });
-
-  annualEnergyBySegment.forEach((annualEnergy, segmentIndex) => {
-    const segment = segmentsByIndex.get(segmentIndex);
-    if (!segment) return;
-    MONTHS.forEach((_, monthIndex) => {
-      const segmentProfile = segment[monthProfilesKey][monthIndex];
-      const contributionScale = annualEnergy * (segment.monthlyWeights?.[monthIndex] ?? (MONTHLY_SOLAR_PROFILE[monthIndex] ?? (1 / 12)));
-      segmentProfile.forEach((value, profileIndex) => {
-        monthlyProfiles[monthIndex][profileIndex] += value * contributionScale;
-        monthlyTotals[monthIndex] += value * contributionScale;
-      });
-    });
-  });
-
-  return {
-    monthlyTotals,
-    monthlyProfiles: monthlyProfiles.map((profile, monthIndex) => {
-      const total = monthlyTotals[monthIndex];
-      if (total <= 0) {
-        return monthProfilesKey === 'dailyByMonth'
-          ? buildIntervalSolarProfile(monthIndex)
-          : buildMonthlySolarHourlyProfile(monthIndex);
-      }
-      return profile.map((value) => value / total);
-    }),
-  };
-}
-
 function buildSolarModel(inputs) {
   const googleDataset = getGoogleSolarDataset(googleSolarRawPayload);
   if (!googleDataset) {
@@ -386,6 +238,7 @@ function interpolateLinearSeries(series, subdivisionsPerStep) {
   });
 }
 
+<<<<<<< Updated upstream
 function summarizeGoogleSolarResult(payload) {
   const summary = payload?.summary || {};
   const bestConfig = summary.bestConfig || {};
@@ -537,3 +390,5 @@ async function loadSampleGoogleRoofData() {
     setUiError(error.message || 'Sample roof data could not be loaded.');
   }
 }
+=======
+>>>>>>> Stashed changes

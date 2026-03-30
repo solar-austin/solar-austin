@@ -149,6 +149,31 @@ h1 {
   padding: 20px;
 }
 
+.inputs-toolbar {
+  margin-bottom: 10px;
+}
+
+.inputs-panel {
+  padding: 14px;
+}
+
+.inputs-panel .input-group + .input-group {
+  margin-top: 10px;
+  padding-top: 10px;
+}
+
+.inputs-panel .input-group h3 {
+  margin-bottom: 6px;
+}
+
+.inputs-panel .field + .field {
+  margin-top: 8px;
+}
+
+.inputs-panel .field-head {
+  margin-bottom: 3px;
+}
+
 .panel-head {
   display: flex;
   justify-content: space-between;
@@ -205,8 +230,53 @@ h1 {
   display: block;
 }
 
+[hidden] {
+  display: none !important;
+}
+
 .field + .field {
   margin-top: 12px;
+}
+
+.cost-mode-toggle {
+  display: flex;
+  gap: 6px;
+  margin: 8px 0 4px;
+}
+
+.cost-mode-btn {
+  flex: 1;
+  padding: 4px 10px;
+  font-size: 0.85rem;
+  font-family: inherit;
+  border: 1px solid rgba(76, 64, 52, 0.25);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-secondary, #6b5e4e);
+  cursor: pointer;
+}
+
+.cost-mode-btn--active {
+  background: var(--accent-strong, #b85c00);
+  color: #fff;
+  border-color: var(--accent-strong, #b85c00);
+}
+
+.text-input {
+  width: 100%;
+  padding: 6px 10px;
+  font-size: 0.92rem;
+  font-family: inherit;
+  border: 1px solid rgba(76, 64, 52, 0.25);
+  border-radius: 5px;
+  background: #fff;
+  color: inherit;
+  box-sizing: border-box;
+}
+
+.text-input:focus {
+  outline: none;
+  border-color: var(--accent-strong, #b85c00);
 }
 
 .inline-cost-card {
@@ -230,6 +300,12 @@ h1 {
 
 .inline-cost-row strong {
   color: var(--accent-strong);
+}
+
+.inline-cost-row--total {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(76, 64, 52, 0.15);
 }
 
 #austinRebateInfo {
@@ -313,6 +389,33 @@ input[type="range"] {
   accent-color: var(--accent);
 }
 
+.toggle-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.backup-toggle {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 6px;
+}
+
+.backup-toggle input[type="checkbox"] {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--accent);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.backup-toggle label {
+  font-size: 0.88rem;
+  cursor: pointer;
+  color: var(--muted);
+}
+
 .scenario-select {
   width: 100%;
   min-width: 0;
@@ -360,6 +463,122 @@ input[type="range"] {
 .ghost-btn:disabled {
   cursor: not-allowed;
   opacity: 0.55;
+}
+
+body.solving,
+body.solving * {
+  cursor: wait !important;
+}
+
+.imported-data-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(46, 125, 88, 0.08);
+  border: 1px solid rgba(46, 125, 88, 0.28);
+  border-radius: 7px;
+  padding: 8px 12px;
+  font-size: 0.85rem;
+  color: var(--success);
+  font-weight: 500;
+  margin-bottom: 4px;
+}
+
+.imported-data-icon {
+  font-size: 1rem;
+  flex-shrink: 0;
+}
+
+input[type="range"]:disabled {
+  opacity: 0.38;
+  pointer-events: none;
+}
+
+select:disabled {
+  opacity: 0.38;
+  pointer-events: none;
+}
+
+.green-button-drop-zone {
+  position: relative;
+  border: 2px dashed rgba(76, 64, 52, 0.25);
+  border-radius: 8px;
+  padding: 20px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.green-button-drop-zone:hover,
+.green-button-drop-zone.drag-over {
+  border-color: rgba(204, 109, 28, 0.55);
+  background: rgba(204, 109, 28, 0.04);
+}
+
+.green-button-drop-zone.has-import {
+  border-style: solid;
+  border-color: rgba(204, 109, 28, 0.4);
+}
+
+.green-button-drop-zone.has-error {
+  border-style: solid;
+  border-color: rgba(180, 40, 40, 0.45);
+  background: rgba(180, 40, 40, 0.04);
+}
+
+.green-button-drop-zone input[type="file"] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  pointer-events: none; /* zone click triggers it programmatically */
+}
+
+.green-button-drop-hint {
+  margin: 0;
+  font-size: 0.88rem;
+  color: rgba(76, 64, 52, 0.6);
+  pointer-events: none;
+}
+
+.green-button-drop-hint span {
+  font-size: 0.8rem;
+  text-decoration: underline;
+}
+
+.green-button-status {
+  margin: 6px 0 0;
+  font-size: 0.85rem;
+  color: var(--success);
+  font-weight: 500;
+}
+
+.green-button-status.is-error {
+  color: #b42828;
+}
+
+.green-button-clear-btn {
+  margin-top: 8px;
+  font-size: 0.8rem;
+  position: relative;
+  z-index: 1;
+}
+
+.field-note {
+  font-size: 0.8rem;
+  color: var(--accent-muted, #888);
+  font-weight: normal;
+}
+
+.green-button-nudge {
+  margin: 0 0 6px;
+  color: var(--muted);
+}
+
+.field--disabled {
+  opacity: 0.45;
+  pointer-events: none;
 }
 
 /* View toggle: highlight the active state to show which view is visible */
@@ -579,10 +798,15 @@ input[type="range"] {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
   margin: 0;
+  position: sticky;
+  top: 28px;
+  z-index: 20;
+  background: #f7f3ec;
 }
 
 .kpi-grid-compact .kpi-card {
   padding: 14px 16px;
+  box-shadow: none;
 }
 
 .kpi-grid-compact .kpi-value {
@@ -640,12 +864,23 @@ input[type="range"] {
 
 #monthlyBillsTable thead th {
   color: var(--text);
-  font-size: 0.82rem;
+  font-size: 0.75rem;
   font-weight: 700;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
   padding-top: 10px;
   padding-bottom: 10px;
+}
+
+#monthlyBillsTable tbody th {
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
+#monthlyBillsTable td {
+  font-size: 0.78rem;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 
 /* Alternating row shading */
@@ -669,6 +904,19 @@ input[type="range"] {
 
 /* "Difference" column base */
 #monthlyBillsTable td.cell-diff {
+  font-weight: 700;
+}
+
+/* Loan payment row */
+#monthlyBillsTable td.cell-loan {
+  color: var(--muted);
+  font-style: italic;
+}
+
+/* Net cost row */
+#monthlyBillsTable tr.bills-row-total th,
+#monthlyBillsTable tr.bills-row-total td {
+  border-top: 1px solid rgba(76, 64, 52, 0.15);
   font-weight: 700;
 }
 

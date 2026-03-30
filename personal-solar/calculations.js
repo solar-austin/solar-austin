@@ -1,3 +1,15 @@
+function isQuotedCostMode() {
+  return document.getElementById('btnCostQuoted')?.classList.contains('cost-mode-btn--active') || false;
+}
+
+function computeSolarInstallCost(systemSize) {
+  if (isQuotedCostMode()) {
+    return Math.max(0, Number(document.getElementById('quotedSolarCost')?.value) || 0);
+  }
+  const base = Number(document.getElementById('baseInstallCost')?.value) || 0;
+  return base + Math.max(0, systemSize) * Number(document.getElementById('installCost').value);
+}
+
 function getInputs() {
   const systemSize = Number(document.getElementById('systemSize').value);
   const installCostPerKw = Number(document.getElementById('installCost').value);
@@ -6,11 +18,18 @@ function getInputs() {
   const loanTermYears = Number(document.getElementById('loanTerm').value);
   const loanInterestRate = Number(document.getElementById('loanInterest').value) / 100;
   const dayMonth = Number(document.getElementById('dayMonth').value);
-  const batteryCapacityKwh = batteryPower * 4;
-  const solarInstallCost = systemSize * installCostPerKw;
+  const batteryCapacityKwh = batteryPower; // slider is now kWh directly
+  const solarInstallCost = computeSolarInstallCost(systemSize);
   const batteryInstallCost = batteryCapacityKwh * batteryCostPerKwh;
+  const backupEnabled = batteryCapacityKwh > 0 && (document.getElementById('backupGatewayEnabled')?.checked ?? false);
+  const backupGatewayCost = backupEnabled ? (Number(document.getElementById('backupGatewayCost')?.value) || 0) : 0;
+  const solarFlatCost = isQuotedCostMode() ? 0 : (Number(document.getElementById('baseInstallCost')?.value) || 0);
+  const solarPerKwCost = solarInstallCost - solarFlatCost;
+  const rebate = APP_MODE === 'austin_energy' && systemSize > 0 ? AUSTIN_ENERGY_SOLAR_REBATE : 0;
   return {
-    annualUsage: Number(document.getElementById('monthlyUsage').value) * 12,
+    annualUsage: importedMonthlyKwh
+      ? importedMonthlyKwh.reduce((s, v) => s + v, 0)
+      : Number(document.getElementById('monthlyUsage').value) * 12,
     dayMonth,
     systemSize,
     installCostPerKw,
@@ -18,8 +37,12 @@ function getInputs() {
     batteryCostPerKwh,
     batteryCapacityKwh,
     solarInstallCost,
+    solarFlatCost,
+    solarPerKwCost,
     batteryInstallCost,
-    installCost: solarInstallCost + batteryInstallCost,
+    backupGatewayCost,
+    rebate,
+    installCost: solarInstallCost + batteryInstallCost + backupGatewayCost - rebate,
     loanTermYears,
     loanInterestRate,
     planType: APP_MODE === 'austin_energy' ? 'value_of_solar' : document.getElementById('planType').value,
@@ -27,19 +50,22 @@ function getInputs() {
     retailRate: APP_MODE === 'austin_energy' ? AUSTIN_ENERGY_DEFAULTS.retailRate / 100 : Number(document.getElementById('retailRate').value) / 100,
     buybackRate: APP_MODE === 'austin_energy' ? AUSTIN_ENERGY_RATES.vosRate : Number(document.getElementById('buybackRate').value) / 100,
     rateEscalation: APP_MODE === 'austin_energy' ? 0 : Number(document.getElementById('rateEscalation').value) / 100,
-    productionPerKw: Number(document.getElementById('productionPerKw').value),
+    productionPerKw: Number(document.getElementById('productionPerKw')?.value) || DEFAULTS.productionPerKw,
   };
 }
 
 function getInputsForSystemSize(systemSize) {
   const inputs = getInputs();
   const roundedSystemSize = Math.max(0, Number(systemSize));
-  const solarInstallCost = roundedSystemSize * inputs.installCostPerKw;
+  const solarInstallCost = computeSolarInstallCost(roundedSystemSize);
+  const solarFlatCost = isQuotedCostMode() ? 0 : (Number(document.getElementById('baseInstallCost')?.value) || 0);
   return {
     ...inputs,
     systemSize: roundedSystemSize,
     solarInstallCost,
-    installCost: solarInstallCost + inputs.batteryInstallCost,
+    solarFlatCost,
+    solarPerKwCost: solarInstallCost - solarFlatCost,
+    installCost: solarInstallCost + inputs.batteryInstallCost - inputs.rebate,
   };
 }
 
@@ -47,17 +73,20 @@ function getInputsForSystemAndBattery(systemSize, batteryPower) {
   const inputs = getInputs();
   const roundedSystemSize = Math.max(0, Number(systemSize));
   const roundedBatteryPower = Math.max(0, Number(batteryPower));
-  const batteryCapacityKwh = roundedBatteryPower * 4;
-  const solarInstallCost = roundedSystemSize * inputs.installCostPerKw;
+  const batteryCapacityKwh = roundedBatteryPower; // parameter is kWh
+  const solarInstallCost = computeSolarInstallCost(roundedSystemSize);
   const batteryInstallCost = batteryCapacityKwh * inputs.batteryCostPerKwh;
+  const solarFlatCost = isQuotedCostMode() ? 0 : (Number(document.getElementById('baseInstallCost')?.value) || 0);
   return {
     ...inputs,
     systemSize: roundedSystemSize,
     batteryPower: roundedBatteryPower,
     batteryCapacityKwh,
     solarInstallCost,
+    solarFlatCost,
+    solarPerKwCost: solarInstallCost - solarFlatCost,
     batteryInstallCost,
-    installCost: solarInstallCost + batteryInstallCost,
+    installCost: solarInstallCost + batteryInstallCost - inputs.rebate,
   };
 }
 
@@ -99,25 +128,20 @@ function calculateAustinEnergyUsageBill(usageKwh, vosSolarCredit = 0) {
   };
 }
 
-function evaluateNetValue(systemSize, batteryPower) {
-  const inputs = getInputsForSystemAndBattery(systemSize, batteryPower);
-  const tenYear = buildTenYearModel(inputs);
-  return tenYear.totalSavings - tenYear.totalInstallCost;
-}
-
-function simulateMonthlyFlow(monthlyUsage, monthlySolar, monthIndex, daysInMonth, batteryPowerKw = 0, solarHourlyProfileOverride = null) {
+function simulateMonthlyFlow(monthlyUsage, monthlySolar, monthIndex, daysInMonth, batteryPowerKw = 0, solarHourlyProfileOverride = null, loadHourlyProfileOverride = null) {
   let imported = 0;
   let exported = 0;
   let directSolar = 0;
   let batteryDischarge = 0;
   const solarHourlyProfile = solarHourlyProfileOverride || buildMonthlySolarHourlyProfile(monthIndex);
-  const batteryPower = Math.max(0, batteryPowerKw);
-  const batteryCapacity = batteryPower * 4;
+  const batteryCapacity = Math.max(0, batteryPowerKw); // parameter is now kWh capacity
+  const batteryPower = batteryCapacity / 2; // 2h discharge rate (~Powerwall spec)
 
   for (let dayIndex = 0; dayIndex < daysInMonth; dayIndex += 1) {
     let soc = 0;
     for (let hour = 0; hour < 24; hour += 1) {
-      const load = (monthlyUsage * HOURLY_LOAD_PROFILE[hour]) / daysInMonth;
+      const loadProfile = loadHourlyProfileOverride || HOURLY_LOAD_PROFILE;
+      const load = (monthlyUsage * loadProfile[hour]) / daysInMonth;
       const solar = (monthlySolar * solarHourlyProfile[hour]) / daysInMonth;
       const matchedSolar = Math.min(load, solar);
       directSolar += matchedSolar;
@@ -158,7 +182,7 @@ function buildTenYearModel(inputs) {
   const totalLoanPaid = hasLoan ? (annualLoanPayment * inputs.loanTermYears) : totalInstallCost;
   const totalInterestPaid = Math.max(0, totalLoanPaid - totalInstallCost);
 
-  let cumulativeCashAdvantage = -totalInstallCost;
+  let cumulativeCashAdvantage = hasLoan ? 0 : -totalInstallCost;
   let paybackYear = null;
 
   yearlyResults.forEach((result, index) => {
