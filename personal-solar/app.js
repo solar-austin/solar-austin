@@ -72,6 +72,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('btnUsageEstimated').addEventListener('click', () => {
     importedMonthlyKwh = null;
     importedMonthlyHourlyProfiles = null;
+    importedDataMeta = null;
     document.getElementById('greenButtonFile').value = '';
     document.getElementById('greenButtonDropZone').classList.remove('has-error');
     setUsageTab('estimated');
@@ -87,7 +88,8 @@ window.addEventListener('DOMContentLoaded', async () => {
     try {
       importedMonthlyKwh = await parseGreenButtonFile(file);
       const totalKwh = Math.round(importedMonthlyKwh.reduce((s, v) => s + v, 0));
-      document.getElementById('importedDataSummary').textContent = `Green Button data · ${totalKwh.toLocaleString()} kWh/year`;
+      const dataLabel = importedMonthlyHourlyProfiles ? 'Green Button data' : 'Billing data';
+      document.getElementById('importedDataSummary').textContent = `${dataLabel} · ${totalKwh.toLocaleString()} kWh/year`;
       if (status) {
         status.textContent = `Imported — ${totalKwh.toLocaleString()} kWh/year`;
         status.classList.remove('is-error');
@@ -99,6 +101,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     } catch (err) {
       importedMonthlyKwh = null;
       importedMonthlyHourlyProfiles = null;
+      importedDataMeta = null;
       if (status) {
         status.textContent = `Not recognized: ${err.message}`;
         status.classList.add('is-error');
@@ -137,6 +140,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('greenButtonClear').addEventListener('click', () => {
     importedMonthlyKwh = null;
     importedMonthlyHourlyProfiles = null;
+    importedDataMeta = null;
     document.getElementById('greenButtonFile').value = '';
     document.getElementById('greenButtonDropZone').classList.remove('has-error');
     syncGreenButtonUi(); // stays on import tab
