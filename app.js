@@ -710,7 +710,7 @@ function update() {
   // Carbon Free Calculation (Excludes Gas and Deficit). Peaker is usage-based from reliability dispatch.
   const carbonSources = data.gasBase[lastIdx] + peakerUsageTwh35 + data.coal[lastIdx] + data.gap[lastIdx];
   const carbonFreePct = total2035 > 0 ? Math.max(0, ((total2035 - carbonSources) / total2035) * 100) : 0;
-  document.getElementById('k_clean').textContent = carbonFreePct.toFixed(0) + '%';
+  setText('k_clean', carbonFreePct.toFixed(0) + '%');
   drawRel(rel, graphHoverEnabled, splitByType, marginGoalPct, showRiskHourBands, showNewPowerTogether);
 
   // Supply margin: minimum hourly (supply - load) / load as %, from reliability run
@@ -722,7 +722,7 @@ function update() {
       if (h === 0 || m < marginPct) marginPct = m;
     }
   }
-  document.getElementById('k_margin').textContent = Math.round(marginPct) + '%';
+  setText('k_margin', Math.round(marginPct) + '%');
   const marginCard = document.getElementById('margin_card');
   if (marginCard) {
     const greenThreshold = marginGoalPct - 0.1; // green when at or above goal (safe for rounding)
@@ -815,7 +815,7 @@ function update() {
   }
   renderBuildoutTable(buildoutRows, buildoutTotals);
   const rateCents = total2035 > 0 ? (totCostM / total2035 / 10) : 0;
-  document.getElementById('k_rate').textContent = rateCents.toFixed(1) + '¢';
+  setText('k_rate', rateCents.toFixed(1) + '¢');
   queueMarkerRefresh();
 }
 
