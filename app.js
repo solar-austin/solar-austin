@@ -52,6 +52,21 @@ const DEFAULT_DEFICIT_STRIPE_WIDTH = 5;
 const DEFAULT_PANEL_ROUNDING = 8;
 const DEFAULT_PANEL_SHADOW = 50;
 
+function setText(id, value) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = value;
+}
+
+function setHtml(id, value) {
+  const el = document.getElementById(id);
+  if (el) el.innerHTML = value;
+}
+
+function setClassName(id, value) {
+  const el = document.getElementById(id);
+  if (el) el.className = value;
+}
+
 function blendHex(hex, targetHex, amount) {
   const a = Math.max(0, Math.min(1, amount));
   const src = hexToRgb(hex);
@@ -591,16 +606,16 @@ function update() {
   const gasPeakTotalDelta = gasPeak - DEFAULT_INPUTS.p_gas_peak;
   const coalTotalDelta = coal - DEFAULT_INPUTS.p_coal;
 
-  document.getElementById('v_growth').textContent = growth + '%';
-  document.getElementById('v_market_sale').textContent = '$' + ERCOT_LZ_AEN_DAM_2025_AVG_PRICE;
-  document.getElementById('v_graph_shade').textContent = graphShade + '%';
-  document.getElementById('v_line_sep').textContent = lineSep + ' px';
-  document.getElementById('v_hatch_width').textContent = hatchWidth + ' px';
-  document.getElementById('v_hatch_strength').textContent = hatchStrength + '%';
-  document.getElementById('v_deficit_width').textContent = deficitWidth + ' px';
-  document.getElementById('v_panel_rounding').textContent = panelRounding + ' px';
-  document.getElementById('v_panel_shadow').textContent = panelShadow + '%';
-  document.getElementById('v_margin_goal').textContent = marginGoalPct + '%';
+  setText('v_growth', growth + '%');
+  setText('v_market_sale', '$' + ERCOT_LZ_AEN_DAM_2025_AVG_PRICE);
+  setText('v_graph_shade', graphShade + '%');
+  setText('v_line_sep', lineSep + ' px');
+  setText('v_hatch_width', hatchWidth + ' px');
+  setText('v_hatch_strength', hatchStrength + '%');
+  setText('v_deficit_width', deficitWidth + ' px');
+  setText('v_panel_rounding', panelRounding + ' px');
+  setText('v_panel_shadow', panelShadow + '%');
+  setText('v_margin_goal', marginGoalPct + '%');
   const relYearLabel = document.getElementById('rel_year_lbl');
   if (relYearLabel) relYearLabel.textContent = String(BASE_YEAR + relYearIndex);
   const seasonYearLabel = document.getElementById('season_year_lbl');
@@ -613,20 +628,20 @@ function update() {
   rootStyle.setProperty('--panel-shadow-y', `${((clampedShadow / 100) * 2).toFixed(2)}px`);
   rootStyle.setProperty('--panel-shadow-blur', `${((clampedShadow / 100) * 8).toFixed(2)}px`);
   rootStyle.setProperty('--panel-shadow-alpha', ((clampedShadow / 100) * 0.2).toFixed(3));
-  document.getElementById('v_nuke').innerHTML = `${nukeMW} MW<span class="val-total">${totalBuildLabel(nukeTotalDelta)}</span>`;
-  document.getElementById('v_biomass').innerHTML = `${biomassMW} MW<span class="val-total">${totalBuildLabel(biomassTotalDelta)}</span>`;
-  document.getElementById('v_solar').innerHTML = `${solarTargetMw} MW<span class="val-total">${annualBuildLabel(buildPlan.solarAnnualMw)}</span>`;
-  document.getElementById('v_dist_solar').innerHTML = `${distSolarTargetMw} MW<span class="val-total">${annualBuildLabel(buildPlan.distSolarAnnualMw)}</span>`;
-  document.getElementById('v_wind').innerHTML = `${windTargetMw} MW<span class="val-total">${annualBuildLabel(buildPlan.windAnnualMw)}</span>`;
-  document.getElementById('v_geo').innerHTML = `${geoTargetMw} MW<span class="val-total">${annualBuildLabel(geoAnnualMw)}</span>`;
-  document.getElementById('v_gas_base').innerHTML = `${gasBase} MW<span class="val-total">${totalBuildLabel(gasBaseTotalDelta)}</span>`;
-  document.getElementById('v_gas_peak').innerHTML = `${gasPeak} MW<span class="val-total">${totalBuildLabel(gasPeakTotalDelta)}</span>`;
-  document.getElementById('v_coal').innerHTML = `${coal} MW<span class="val-total">${totalBuildLabel(coalTotalDelta)}</span>`;
-  document.getElementById('v_ee').textContent = ee + ' MW';
-  document.getElementById('v_dr').textContent = dr + ' MW';
-  document.getElementById('v_import_allowance').textContent = importAllowance + ' MW';
-  document.getElementById('v_batt').innerHTML = `${batt} MW<span class="val-total">${annualBuildLabel(Math.max(0, batt - DEFAULT_INPUTS.p_batt) / BUILD_YRS_TOTAL)}</span>`;
-  document.getElementById('v_dist_batt').innerHTML = `${distBatt} MW<span class="val-total">${annualBuildLabel(Math.max(0, distBatt - DEFAULT_INPUTS.p_dist_batt) / BUILD_YRS_TOTAL)}</span>`;
+  setHtml('v_nuke', `${nukeMW} MW<span class="val-total">${totalBuildLabel(nukeTotalDelta)}</span>`);
+  setHtml('v_biomass', `${biomassMW} MW<span class="val-total">${totalBuildLabel(biomassTotalDelta)}</span>`);
+  setHtml('v_solar', `${solarTargetMw} MW<span class="val-total">${annualBuildLabel(buildPlan.solarAnnualMw)}</span>`);
+  setHtml('v_dist_solar', `${distSolarTargetMw} MW<span class="val-total">${annualBuildLabel(buildPlan.distSolarAnnualMw)}</span>`);
+  setHtml('v_wind', `${windTargetMw} MW<span class="val-total">${annualBuildLabel(buildPlan.windAnnualMw)}</span>`);
+  setHtml('v_geo', `${geoTargetMw} MW<span class="val-total">${annualBuildLabel(geoAnnualMw)}</span>`);
+  setHtml('v_gas_base', `${gasBase} MW<span class="val-total">${totalBuildLabel(gasBaseTotalDelta)}</span>`);
+  setHtml('v_gas_peak', `${gasPeak} MW<span class="val-total">${totalBuildLabel(gasPeakTotalDelta)}</span>`);
+  setHtml('v_coal', `${coal} MW<span class="val-total">${totalBuildLabel(coalTotalDelta)}</span>`);
+  setText('v_ee', ee + ' MW');
+  setText('v_dr', dr + ' MW');
+  setText('v_import_allowance', importAllowance + ' MW');
+  setHtml('v_batt', `${batt} MW<span class="val-total">${annualBuildLabel(Math.max(0, batt - DEFAULT_INPUTS.p_batt) / BUILD_YRS_TOTAL)}</span>`);
+  setHtml('v_dist_batt', `${distBatt} MW<span class="val-total">${annualBuildLabel(Math.max(0, distBatt - DEFAULT_INPUTS.p_dist_batt) / BUILD_YRS_TOTAL)}</span>`);
   const data = { nuke: [], biomass: [], gasBase: [], gasPeak: [], coal: [], exWind: [], exSolar: [], geo: [], newWind: [], newSolar: [], distSolar: [], ee: [], dr: [], imports: [], gap: [], surplus: [], load: [] };
   const importAllowanceTwhCap = (Math.max(0, importAllowance) * HOURS_PER_YEAR) / MWH_PER_TWH;
   const defaultBuildPlan = getBuildPlanFromTargets(DEFAULT_INPUTS.p_wind, DEFAULT_INPUTS.p_solar, DEFAULT_INPUTS.p_dist_solar, YEARS - 1);
