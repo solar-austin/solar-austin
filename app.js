@@ -51,6 +51,7 @@ const DEFAULT_HATCH_STRENGTH = 50;
 const DEFAULT_DEFICIT_STRIPE_WIDTH = 5;
 const DEFAULT_PANEL_ROUNDING = 8;
 const DEFAULT_PANEL_SHADOW = 50;
+const FINANCIAL_TABLE_ZERO_CUTOFF_TWH = 0.000001;
 
 function setText(id, value) {
   const el = document.getElementById(id);
@@ -835,7 +836,7 @@ function update() {
 }
 
 /**
- * Populates the Landed Cost Financials table (2035 snapshot). Resources with vol below 0.05 TWh are omitted.
+ * Populates the Landed Cost Financials table (2035 snapshot). Resources with vol below the zero cutoff are omitted.
  * Remote resources get per-resource TCOS applied. Battery row: capacity (MW), base $k/MW-year, total $M. Returns total cost in $M.
  */
 function runFinancials(twh, txAdder, loadTWh, battMW, distBattMW, marketShapeData = null) {
@@ -886,10 +887,10 @@ function runFinancials(twh, txAdder, loadTWh, battMW, distBattMW, marketShapeDat
     const costM = (vol * MWH_PER_TWH * landedP) / DOLLARS_PER_MILLION;
     tot += costM;
 
-    if (hideIfZero && vol < 0.05) return;
+    if (hideIfZero && vol < FINANCIAL_TABLE_ZERO_CUTOFF_TWH) return;
 
     const color = STYLES[d.k]?.c ?? '#999';
-    const zeroRow = vol < 0.05 ? ' style="opacity:0.45"' : '';
+    const zeroRow = vol < FINANCIAL_TABLE_ZERO_CUTOFF_TWH ? ' style="opacity:0.45"' : '';
 
     html += `<tr${zeroRow}>
       <td style="border-left:4px solid ${color}">${d.n}</td>
@@ -930,7 +931,7 @@ function runFinancials(twh, txAdder, loadTWh, battMW, distBattMW, marketShapeDat
       : k === 'surplus'
         ? (marketShapeData?.surplusTwh ?? twh[k] ?? 0)
         : (twh[k] ?? 0);
-    return vol >= 0.05;
+    return vol >= FINANCIAL_TABLE_ZERO_CUTOFF_TWH;
   })) {
     html += '<tr class="fin-section-divider"><td colspan="6"></td></tr>';
   }

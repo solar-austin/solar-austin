@@ -249,32 +249,6 @@ function setUiError(message = '') {
   errorEl.textContent = message;
 }
 
-function buildLookupMapUrl(payload, result) {
-  const zoom = getLookupMapZoom(payload);
-  const latitude = payload?.raw?.center?.latitude ?? payload?.request?.latitude;
-  const longitude = payload?.raw?.center?.longitude ?? payload?.request?.longitude;
-  if (Number.isFinite(latitude) && Number.isFinite(longitude)) {
-    return `https://www.google.com/maps?q=${encodeURIComponent(`${latitude},${longitude}`)}&t=k&z=${zoom}&output=embed`;
-  }
-  const address = result?.address || payload?.summary?.formattedAddress || payload?.request?.address || '';
-  if (address) {
-    return `https://www.google.com/maps?q=${encodeURIComponent(address)}&t=k&z=${zoom}&output=embed`;
-  }
-  return 'https://www.google.com/maps?q=Austin%2C%20TX&output=embed';
-}
-
-function getLookupMapZoom(payload) {
-  const solarPotential = payload?.raw?.solarPotential;
-  const roofArea =
-    Number(solarPotential?.wholeRoofStats?.areaMeters2)
-    || Number(solarPotential?.maxArrayAreaMeters2)
-    || 0;
-  if (roofArea >= 4000) return 18;
-  if (roofArea >= 2000) return 19;
-  if (roofArea >= 1000) return 20;
-  return 21;
-}
-
 async function lookupGoogleRoof() {
   const els = getGoogleLookupElements();
   const address = els.addressInput.value.trim();

@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Personal Solar Install Calculator</title>
-  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="/personal-solar/styles.css" />
 </head>
 <body>
   <div class="site-shell">
@@ -551,7 +551,7 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/geotiff@2.1.3/dist-browser/geotiff.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.9.0/proj4.min.js"></script>
-  <script src="map-overlay.js"></script>
+  <script src="/personal-solar/map-overlay.js"></script>
   <script>
     fetch('/.netlify/functions/solar-config')
       .then(r => r.json())
@@ -566,15 +566,15 @@
       })
       .catch(err => console.error('solar-config fetch failed:', err));
   </script>
-  <script src="utils.js"></script>
-  <script src="config.js"></script>
-  <script src="green-button.js"></script>
-  <script src="google-solar.js"></script>
-  <script src="calculations.js"></script>
-  <script src="solar-model.js"></script>
-  <script src="solver.js"></script>
-  <script src="charts.js"></script>
-  <script src="ui-sync.js"></script>
-  <script src="app.js"></script>
+  <script src="/personal-solar/utils.js"></script>
+  <script src="/personal-solar/config.js"></script>
+  <script src="/personal-solar/green-button.js"></script>
+  <script src="/personal-solar/google-solar.js"></script>
+  <script src="/personal-solar/calculations.js"></script>
+  <script src="/personal-solar/solar-model.js"></script>
+  <script src="/personal-solar/solver.js"></script>
+  <script src="/personal-solar/charts.js"></script>
+  <script src="/personal-solar/ui-sync.js"></script>
+  <script src="/personal-solar/app.js"></script>
 </body>
 </html>
