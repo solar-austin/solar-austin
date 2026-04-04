@@ -21,6 +21,35 @@ body {
   padding-bottom: 60px;
 }
 
+.mobile-unsupported {
+  display: none;
+  min-height: 100vh;
+  padding: 24px;
+  align-items: center;
+  justify-content: center;
+}
+
+.mobile-unsupported-card {
+  max-width: 420px;
+  padding: 24px;
+  border: 1px solid #ddd;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  text-align: center;
+}
+
+.mobile-unsupported-card h1 {
+  margin: 0 0 12px;
+  font-size: 24px;
+}
+
+.mobile-unsupported-card p {
+  margin: 0;
+  color: #4b5563;
+  line-height: 1.5;
+}
+
 .wrap {
   max-width: 1400px;
   margin: 0 auto;
@@ -1027,5 +1056,15 @@ td:first-child {
 .good-bg {
   background: #e8f5e9;
   border-color: #66bb6a;
+}
+
+@media (max-width: 900px) {
+  .mobile-unsupported {
+    display: flex;
+  }
+
+  .wrap {
+    display: none;
+  }
 }
 
