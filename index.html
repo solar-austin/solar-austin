@@ -16,7 +16,7 @@
   <div class="kpi-bar">
     <div class="kpi">
       <div class="kpi-val" id="k_rate">0.0¢</div>
-      <div class="kpi-lbl"><span class="has-tooltip" title="Average cost of generation in 2035: total system cost divided by 2035 load, in cents per kWh. This includes modeled resource costs, TCOS adders where applicable, and net market purchases or sales priced from the ERCOT Austin load-zone month-by-hour matrix.">Est. Gen Rate (2035)</span></div>
+      <div class="kpi-lbl"><span class="has-tooltip" title="Modeled system cost in 2035: total annual resource cost divided by total load, in cents per kWh. This is not the customer retail rate — it reflects Austin Energy's modeled generation and procurement cost, including TCOS adders and net market purchases or sales priced from the ERCOT Austin load-zone month-by-hour matrix.">Total Cost/kWh (2035)</span></div>
     </div>
     <div class="kpi">
       <div class="kpi-val" id="k_clean">0%</div>
@@ -47,7 +47,7 @@
           <span class="swatch" style="background: #4FC3F7"></span>
           <span class="lbl has-tooltip" title="Total utility wind power in 2035 (MW), including existing contracts. New wind in 2035 is total wind minus existing wind in 2035.">Utility Wind</span>
         </div>
-          <div class="slider-wrap"><input type="range" id="p_wind" min="864" max="6000" value="864" data-default="864"></div>
+          <div class="slider-wrap"><input type="range" id="p_wind" min="0" max="6000" value="864" data-default="864"></div>
           <span class="val" id="v_wind">864 MW</span>
       </div>
       <div class="row">
@@ -55,7 +55,7 @@
           <span class="swatch" style="background: #E09328"></span>
           <span class="lbl has-tooltip" title="Total utility solar power in 2035 (MW), including existing contracts after degradation. New utility solar in 2035 is total utility solar minus existing utility solar in 2035.">Utility Solar</span>
         </div>
-          <div class="slider-wrap"><input type="range" id="p_solar" min="806" max="6000" value="806" data-default="806"></div>
+          <div class="slider-wrap"><input type="range" id="p_solar" min="0" max="6000" value="806" data-default="806"></div>
         <span class="val" id="v_solar">806 MW</span>
       </div>
       <div class="row">
@@ -165,14 +165,6 @@
         <div class="slider-wrap"><input type="range" id="p_growth" min="0" max="5" step="0.1" value="1.5" data-default="1.5" data-snap="false"></div>
         <span class="val" id="v_growth">1.5%</span>
       </div>
-      <div class="row">
-        <div class="row-head">
-          <span class="swatch" style="background: #94a3b8"></span>
-          <span class="lbl has-tooltip" title="Reference display for the average 2025 ERCOT Austin load-zone DAM price. The model prices market purchases and sales directly from the full ERCOT month-by-hour price matrix rather than from a user-set base price.">ERCOT Avg Market Price</span>
-        </div>
-      <div class="slider-wrap"><input type="range" id="p_market_sale" min="0" max="120" step="1" value="37" data-default="37" data-snap="false" disabled></div>
-      <span class="val" id="v_market_sale">$37</span>
-      </div>
 
       <details class="ui-options-panel">
         <summary class="input-section">UI Options</summary>
@@ -255,7 +247,7 @@
         <div class="scenario-action-row">
           <select id="p_scenario_action" class="scenario-select" aria-label="Scenario action" onchange="update()">
                 <option value="reliability-gap">Meet peak reliability</option>
-                <option value="zero-emissions">Meet peak reliability (zero emissions)</option>
+                <option value="zero-emissions" selected>Meet peak reliability (zero emissions)</option>
                 <option value="portfolio-12">Portfolio 12 - renewables + storage, gas out</option>
                 <option value="portfolio-15">Portfolio 15 - more solar + storage, gas out</option>
                 <option value="ascend-a">Ascend A - added wind + gas peakers</option>
@@ -319,15 +311,15 @@
 
   <div class="grid-bot">
     <div class="card">
-      <h3 class="has-tooltip" title="2035 cost by resource: volume (TWh), base levelized yearly cost ($/MWh), per-resource TCOS, landed $/MWh, and total $M. Here, levelized yearly cost means the model spreads a resource's upfront project cost over its life instead of charging it all in one year. Landed cost equals base cost plus TCOS. Market purchase and sale rows use effective prices derived from the ERCOT Austin load-zone month-by-hour matrix. Rows under 0.05 TWh are hidden.">Landed Cost Financials (2035 Snapshot)</h3>
+      <h3 class="has-tooltip" title="2035 cost by resource: volume (TWh), base levelized yearly cost ($/MWh), per-resource TCOS, Austin Energy's cost ($/MWh), and total $M. Here, levelized yearly cost means the model spreads a resource's upfront project cost over its life instead of charging it all in one year. Austin Energy's cost equals base cost plus TCOS. Market purchase and sale rows use effective prices derived from the ERCOT Austin load-zone month-by-hour matrix. Rows under 0.05 TWh are hidden.">Austin Energy's Cost (2035 Snapshot)</h3>
       <table class="fin-table">
         <thead>
           <tr>
-            <th class="fin-resource"><span class="has-tooltip" title="Generation resource or market item included in the 2035 landed cost snapshot. This table is meant to show the all-in annual cost contribution of each part of the modeled 2035 system.">Resource</span></th>
+            <th class="fin-resource"><span class="has-tooltip" title="Generation resource or market item included in the 2035 cost snapshot. This table is meant to show the all-in annual cost contribution of each part of the modeled 2035 system.">Resource</span></th>
             <th><span class="has-tooltip" title="Estimated 2035 annual energy volume for that resource, in terawatt-hours. Battery rows show installed MW instead because battery costs in this model are handled as annual capacity-style costs rather than energy output.">Vol</span></th>
             <th><span class="has-tooltip" title="Base levelized yearly cost assumption for that resource before TCOS is added. This means the model spreads the resource's upfront project cost over its useful life and turns it into a yearly energy cost before local delivery or transmission adders.">Base ($)</span></th>
             <th><span class="has-tooltip" title="Transmission cost of service adder applied to eligible resources. This is used to capture an extra delivered-cost penalty for non-local resources on top of the base cost assumption.">TCOS ($)</span></th>
-            <th><span class="has-tooltip" title="Landed cost per MWh, calculated as base cost plus TCOS. This is the effective delivered energy cost used in the total annual cost estimate for that row.">Total ($)</span></th>
+            <th><span class="has-tooltip" title="Austin Energy's cost per MWh, calculated as base cost plus TCOS. This is the effective delivered energy cost used in the total annual cost estimate for that row.">AE Cost ($)</span></th>
             <th><span class="has-tooltip" title="Estimated total annual cost contribution from that resource in 2035, in millions of dollars. Negative values indicate surplus sales revenue that offsets total system cost.">Total ($M)</span></th>
           </tr>
         </thead>
@@ -336,20 +328,20 @@
           <tr class="fin-total">
             <td>TOTAL SYSTEM</td>
             <td id="t_vol">--</td>
+            <td></td>
+            <td></td>
             <td>Avg: <span id="t_avg">--</span></td>
-            <td></td>
-            <td></td>
             <td id="t_cost">--</td>
           </tr>
         </tfoot>
       </table>
     </div>
     <div class="card">
-      <h3 class="has-tooltip" title="Year-by-year additions needed to reach the selected 2035 targets, shown in MW rather than annualized dollars. This table excludes the legacy fleet and focuses only on the buildout program itself.">Annual Buildout (MW)</h3>
+      <h3 class="has-tooltip" title="Year-by-year additions needed to reach the selected 2035 targets, shown in MW rather than annualized dollars. This table excludes the legacy fleet and focuses only on new generation.">Annual New Generation (MW)</h3>
       <table class="fin-table buildout-table">
         <thead>
           <tr>
-            <th class="buildout-year"><span class="has-tooltip" title="Planning year for the annual buildout estimates below. Each row shows what the buildout program looks like in that year, separate from the legacy fleet.">Year</span></th>
+            <th class="buildout-year"><span class="has-tooltip" title="Planning year for the annual new generation estimates below. Each row shows what new generation looks like in that year, separate from the legacy fleet.">Year</span></th>
             <th><span class="has-tooltip" title="New utility wind MW added in that year.">Utility Wind</span></th>
             <th><span class="has-tooltip" title="New utility solar MW added in that year.">Utility Solar</span></th>
             <th><span class="has-tooltip" title="New local solar MW added in that year.">Local Solar</span></th>
@@ -357,7 +349,7 @@
             <th><span class="has-tooltip" title="New utility-scale battery MW added in that year.">Utility Battery</span></th>
             <th><span class="has-tooltip" title="New local battery MW added in that year.">Local Battery</span></th>
             <th><span class="has-tooltip" title="Total MW added in this specific year only.">This Year's Additions MW</span></th>
-            <th><span class="has-tooltip" title="Total buildout MW online by that year, excluding the legacy fleet.">Cumulative Buildout MW</span></th>
+            <th><span class="has-tooltip" title="Total new generation MW online by that year, excluding the legacy fleet.">Cumulative New Generation MW</span></th>
           </tr>
         </thead>
         <tbody id="buildoutBody"></tbody>
@@ -375,14 +367,14 @@
           </tr>
         </tfoot>
       </table>
-      <p class="table-note">This table shows the year-by-year buildout program in MW. It excludes the legacy fleet and tracks only added resources, showing what is added in each year and the cumulative buildout online by that point.</p>
+      <p class="table-note">This table shows year-by-year new generation in MW. It excludes the legacy fleet and tracks only added resources, showing what is added in each year and the cumulative new generation online by that point.</p>
     </div>
   </div>
   <details class="card assumptions-expand">
     <summary>Detailed Methodology, Assumptions, and Sources</summary>
     <div class="assumptions-copy">
       <p>Austin Energy has an adopted 2035 direction to move toward a carbon-free portfolio in its <a href="https://austinenergy.com/about/reports/generation-resource-planning" target="_blank" rel="noopener noreferrer">Resource, Generation and Climate Protection Plan to 2035</a>, but it has not published a fully specified project-by-project implementation plan with complete build schedules, fixed procurement outcomes, and unit-by-unit retirement dates. This model should therefore be read as an Austin Energy-specific scenario tool built from the best public data available, with clear distinctions between Austin Energy source data, ERCOT shape proxies, national reference values, and explicit planning assumptions.</p>
-      <p>This model combines three linked views of the same scenario: an annual energy outlook from 2025 through 2035, a 24-hour 2035 summer reliability stress test, and a 2035 landed-cost table. The numbers here are meant to make the model transparent. Some inputs are tied to public Austin Energy or ERCOT data, while others are explicit planning assumptions chosen in the model and kept editable in the UI.</p>
+      <p>This model combines three linked views of the same scenario: an annual energy outlook from 2025 through 2035, a 24-hour 2035 summer reliability stress test, and a 2035 cost table. The numbers here are meant to make the model transparent. Some inputs are tied to public Austin Energy or ERCOT data, while others are explicit planning assumptions chosen in the model and kept editable in the UI.</p>
 
       <h4>1. Horizon, units, and baseline structure</h4>
       <p>The planning horizon is 11 years, from 2025 through 2035. Annual energy is modeled in TWh, reliability is modeled hour by hour in MW and MWh, and costs are shown in $/MWh, $k/MW-year for batteries, and total annual cost in millions of dollars. The baseline 2025 annual load is 14.2 TWh. The baseline summer peak for the reliability stress test is 3,135 MW, based on Austin Energy's reported summer 2024 peak demand. The load-growth slider applies to both the annual energy outlook and the 2035 stress test.</p>
@@ -563,7 +555,7 @@
       <p>The default generation-price assumptions in the landed-cost table are based on midpoint values from <a href="https://www.lazard.com/media/uounhon4/lazards-lcoeplus-june-2025.pdf" target="_blank" rel="noopener noreferrer">Lazard's June 2025 LCOE+ Version 18.0</a> where the model has a reasonably close technology match. Battery defaults are based on Lazard's June 2025 LCOS Version 10.0 utility-scale standalone 4-hour storage range in $/kW-year, referenced from <a href="https://www.lazard.com/research-insights/2025-levelized-cost-of-energyplus/" target="_blank" rel="noopener noreferrer">Lazard's 2025 LCOE+ overview page</a>. Geothermal is treated separately: because an Austin-focused buildout would likely rely on deeper EGS-style geothermal rather than conventional western hydrothermal, the model uses a higher planning placeholder informed by <a href="https://www.nrel.gov/geothermal/2025-us-geothermal-market-report" target="_blank" rel="noopener noreferrer">NREL's 2025 Geothermal Market Report</a>, which says EGS remains on a declining path toward hydrothermal-like costs rather than already matching them today. Local solar and local battery are treated differently from utility-side resources: their default utility cost is set to zero because they are modeled as private purchases rather than Austin Energy spending. These are still planning defaults for scenario testing, not Austin Energy's actual contract prices, and every value remains editable in the table.</p>
       <p>The current default model values are: nuclear $34/MWh, biomass $0/MWh placeholder, gas baseload $32/MWh, gas peaker $109/MWh, coal $73/MWh, existing wind $62/MWh, new wind $62/MWh, existing solar $58/MWh, new solar $58/MWh, local solar $0/MWh, geothermal $140/MWh, utility battery $238k/MW-year, and local battery $0k/MW-year. The model also keeps energy efficiency at $25/MWh and demand response at $25/MWh. A default TCOS adder of $40/MWh is applied to eligible remote resources unless overridden in the table.</p>
       <div class="formula-block">
-        <div class="formula-line"><span class="formula-label">Landed cost</span><span class="formula-math">\( \mathrm{Landed\ Cost} = \mathrm{Base\ Price} + \mathrm{TCOS} \)</span></div>
+        <div class="formula-line"><span class="formula-label">AE cost</span><span class="formula-math">\( \mathrm{AE\ Cost} = \mathrm{Base\ Price} + \mathrm{TCOS} \)</span></div>
         <div class="formula-line"><span class="formula-label">Energy resource cost</span><span class="formula-math">\( \mathrm{Annual\ Cost\ (\$M)} = \mathrm{TWh} \times \mathrm{Landed\ \$/MWh} \)</span></div>
         <div class="formula-line"><span class="formula-label">Battery cost</span><span class="formula-math">\( \mathrm{Annual\ Cost\ (\$M)} = \dfrac{\mathrm{MW} \times (\mathrm{\$k/MW\text{-}yr})}{1000} \)</span></div>
       </div>
@@ -722,7 +714,7 @@
       <p>In the cost model, batteries are not priced on annual TWh output. They are priced as annual capacity-style resources using $k/MW-year.</p>
 
       <h4>10. Gap, surplus, and reliability margin treatment</h4>
-      <p>Whenever annual supply is below annual load, the difference is shown as a deficit or market gap. In the 2035 landed-cost table and buildout table, that deficit is priced through the ERCOT Austin load-zone month-hour market matrix plus any applicable TCOS. If annual supply is above annual load, the model shows surplus sales revenue using the same market matrix. In the reliability chart, risk hours are hours where supply falls short of load by more than 10 MW. The margin KPI uses the minimum hourly value of (supply minus load) divided by load.</p>
+      <p>Whenever annual supply is below annual load, the difference is shown as a deficit or market gap. In the 2035 cost table and new generation table, that deficit is priced through the ERCOT Austin load-zone month-hour market matrix plus any applicable TCOS. If annual supply is above annual load, the model shows surplus sales revenue using the same market matrix. In the reliability chart, risk hours are hours where supply falls short of load by more than 10 MW. The margin KPI uses the minimum hourly value of (supply minus load) divided by load.</p>
       <div class="formula-block">
         <div class="formula-line"><span class="formula-label">Annual gap</span><span class="formula-math">\( \max(0,\ \mathrm{annual\ load} - \mathrm{annual\ supply}) \)</span></div>
         <div class="formula-line"><span class="formula-label">Risk hour</span><span class="formula-math">\( \mathrm{Hourly\ Load} > \mathrm{Hourly\ Supply} + 10\ \mathrm{MW} \)</span></div>
@@ -748,5 +740,6 @@
 </script>
 <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
 <script src="app.js"></script>
+<div id="tooltip-popup"></div>
 </body>
 </html>
