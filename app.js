@@ -863,7 +863,7 @@ function runFinancials(twh, txAdder, loadTWh, battMW, distBattMW, marketShapeDat
   let html = '';
   let tot = 0;
 
-  const appendFinancialRow = (d) => {
+  const appendFinancialRow = (d, hideIfZero = false) => {
     const vol = d.k === 'gap'
       ? (marketShapeData?.gapTwh ?? twh[d.k] ?? 0)
       : d.k === 'surplus'
@@ -886,11 +886,12 @@ function runFinancials(twh, txAdder, loadTWh, battMW, distBattMW, marketShapeDat
     const costM = (vol * MWH_PER_TWH * landedP) / DOLLARS_PER_MILLION;
     tot += costM;
 
-    if (vol < 0.05) return;
+    if (hideIfZero && vol < 0.05) return;
 
     const color = STYLES[d.k]?.c ?? '#999';
+    const zeroRow = vol < 0.05 ? ' style="opacity:0.45"' : '';
 
-    html += `<tr>
+    html += `<tr${zeroRow}>
       <td style="border-left:4px solid ${color}">${d.n}</td>
       <td>${vol.toFixed(2)} TWh</td>
       <td>${d.k === 'surplus' || d.k === 'gap'
@@ -902,7 +903,7 @@ function runFinancials(twh, txAdder, loadTWh, battMW, distBattMW, marketShapeDat
     </tr>`;
   };
 
-  rows.forEach(appendFinancialRow);
+  rows.forEach((d) => appendFinancialRow(d, false));
 
   // Battery row: capacity (MW), base price $k/MW-year → cost $M = (batt × price_$k) / 1000
   [
@@ -934,7 +935,7 @@ function runFinancials(twh, txAdder, loadTWh, battMW, distBattMW, marketShapeDat
     html += '<tr class="fin-section-divider"><td colspan="6"></td></tr>';
   }
 
-  marketRows.forEach(appendFinancialRow);
+  marketRows.forEach((d) => appendFinancialRow(d, true));
 
   const finBody = document.getElementById('finBody');
   const tVol = document.getElementById('t_vol');
@@ -3264,8 +3265,54 @@ document.querySelectorAll('input').forEach((input) => {
 window.addEventListener('load', () => {
   initSliderDefaultMarkers();
   document.querySelectorAll('input[type="range"]').forEach(updateRangeFill);
+  initTooltips();
   update();
 });
+
+function initTooltips() {
+  const popup = document.getElementById('tooltip-popup');
+  if (!popup) return;
+
+  // Move title → data-tooltip to suppress native browser tooltips, then use custom popup.
+  document.querySelectorAll('.has-tooltip[title]').forEach((el) => {
+    el.dataset.tooltip = el.title;
+    el.removeAttribute('title');
+  });
+
+  let hideTimer = null;
+
+  document.addEventListener('mouseover', (e) => {
+    const el = e.target.closest('[data-tooltip]');
+    if (!el) return;
+    clearTimeout(hideTimer);
+    popup.textContent = el.dataset.tooltip;
+    popup.style.display = 'block';
+    positionTooltip(e, popup);
+  });
+
+  document.addEventListener('mousemove', (e) => {
+    if (popup.style.display === 'block') positionTooltip(e, popup);
+  });
+
+  document.addEventListener('mouseout', (e) => {
+    const el = e.target.closest('[data-tooltip]');
+    if (!el) return;
+    hideTimer = setTimeout(() => { popup.style.display = 'none'; }, 80);
+  });
+}
+
+function positionTooltip(e, popup) {
+  const pad = 12;
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  let x = e.clientX + pad;
+  let y = e.clientY + pad;
+  // Prevent clipping on right/bottom edge
+  if (x + popup.offsetWidth > vw - pad) x = e.clientX - popup.offsetWidth - pad;
+  if (y + popup.offsetHeight > vh - pad) y = e.clientY - popup.offsetHeight - pad;
+  popup.style.left = x + 'px';
+  popup.style.top = y + 'px';
+}
 
 window.addEventListener('resize', refreshSliderDefaultMarkers);
 
