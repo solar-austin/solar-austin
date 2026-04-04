@@ -278,6 +278,21 @@ button.has-tooltip {
 button.has-tooltip:hover {
   text-decoration-color: var(--accent);
 }
+/* Custom tooltip popup — replaces native title attr for Mac compatibility */
+#tooltip-popup {
+  position: fixed;
+  z-index: 9000;
+  background: #1a1a1a;
+  color: #f0f0f0;
+  padding: 7px 11px;
+  border-radius: 5px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  max-width: 300px;
+  pointer-events: none;
+  display: none;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.35);
+}
 
 .input-section {
   margin: 14px 0 8px 0;
