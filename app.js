@@ -34,7 +34,7 @@ const CF = { wind: 0.37, solar: 0.1955, distSolar: 0.1685, geo: 0.646, biomass: 
  * Battery defaults are mapped to Lazard's June 2025 LCOS v10.0 utility-scale standalone 4-hour $/kW-year range midpoint.
  * EE / DR / gap remain explicit model assumptions rather than Lazard LCOE rows.
  */
-const PRICES = { nuke: 34, biomass: 214, gasBase: 32, gasPeak: 109, coal: 73, ee: 25, dr: 25, exWind: 62, exSolar: 58, newWind: 62, newSolar: 58, distSolar: 99.1, geo: 140, batt: 238, distBatt: 0 };
+const PRICES = { nuke: 34, biomass: 85, gasBase: 32, gasPeak: 109, coal: 73, ee: 25, dr: 25, exWind: 62, exSolar: 58, newWind: 62, newSolar: 58, distSolar: 99.1, geo: 100, batt: 238, distBatt: 0 };
 const TCOS_OVERRIDES = {};
 const DEFAULT_TCOS = 40;
 
