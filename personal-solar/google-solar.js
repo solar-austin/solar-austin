@@ -250,6 +250,7 @@ function setUiError(message = '') {
 }
 
 async function lookupGoogleRoof() {
+  window._userLookupDone = true;
   const els = getGoogleLookupElements();
   const address = els.addressInput.value.trim();
   if (!address) {
@@ -314,15 +315,9 @@ async function loadSampleGoogleRoofData() {
     googleSolarResult = summarizeGoogleSolarResult(payload);
     syncInstallCostFromGoogleResult();
     applyGoogleRoofResult();
-    const elements = getGoogleLookupElements();
-    if (elements.addressInput && !elements.addressInput.value) {
-      elements.addressInput.value = payload?.summary?.formattedAddress || payload?.request?.address || '';
-    }
-    setUiError('');
-    renderGoogleLookupResult();
-  } catch (error) {
-    const elements = getGoogleLookupElements();
-    setUiError(error.message || 'Sample roof data could not be loaded.');
+    // Do not pre-fill address or reveal results — wait for explicit user lookup
+  } catch (_error) {
+    // Sample data unavailable — calculator will still work, just no roof defaults
   }
 }
 

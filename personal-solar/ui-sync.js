@@ -426,7 +426,23 @@ function renderGoogleLookupResult() {
   const hasResult = Boolean(googleSolarResult);
   syncSystemSizeSliderMax();
   syncProductionFieldVisibility();
-  els.results.hidden = !hasResult;
+  // Always keep the lookup results div hidden — values are written by JS but never displayed
+  els.results.hidden = true;
+
+  // Only trigger phase 2 when the user explicitly submitted an address
+  if (hasResult && window._userLookupDone) {
+    const resultsSection = document.getElementById('resultsSection');
+    const phase2Inputs = document.getElementById('phase2Inputs');
+    const ctaBtn = document.getElementById('googleLookupButton');
+
+    if (phase2Inputs) phase2Inputs.hidden = false;
+    if (ctaBtn) ctaBtn.hidden = true;
+
+    if (resultsSection && resultsSection.hidden) {
+      resultsSection.hidden = false;
+      setTimeout(() => resultsSection.scrollIntoView({ behavior: 'smooth', block: 'start' }), 120);
+    }
+  }
   if (!hasResult) {
     els.resultAddress.textContent = '-';
     els.resultPanels.textContent = '-';

@@ -57,6 +57,7 @@ const FIELD_FORMATTERS = {
 };
 
 const APP_MODE = (() => {
+  if (window._appMode) return window._appMode;
   try {
     const params = new URLSearchParams(window.location.search);
     const mode = (params.get('mode') || '').trim().toLowerCase();
