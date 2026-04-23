@@ -8,7 +8,9 @@ function json(statusCode, body) {
     statusCode,
     headers: {
       'content-type': 'application/json; charset=utf-8',
-      'cache-control': 'no-store',
+      'cache-control': statusCode === 200
+        ? 'public, s-maxage=86400, stale-while-revalidate=3600'
+        : 'no-store',
     },
     body: JSON.stringify(body),
   };
