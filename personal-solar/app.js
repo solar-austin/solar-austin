@@ -54,17 +54,87 @@ function resetInputs() {
   updateCalculator();
 }
 
+const BILL_RATE_DEFAULT = 0.145; // $/kWh for bill ↔ usage conversion
+
+function updateRangeFill(input) {
+  const min = Number(input.min) || 0;
+  const max = Number(input.max) || 100;
+  const val = Number(input.value);
+  const pct = ((val - min) / (max - min)) * 100;
+  input.style.setProperty('--range-fill', `${pct}%`);
+}
+
+function syncAllRangeFills() {
+  document.querySelectorAll('input[type="range"]').forEach(updateRangeFill);
+}
+
+function syncBillToUsage(billValue) {
+  const kWh = Math.round(billValue / BILL_RATE_DEFAULT / 10) * 10;
+  const usageInput = document.getElementById('monthlyUsage');
+  if (usageInput) {
+    usageInput.value = String(Math.max(Number(usageInput.min), Math.min(Number(usageInput.max), kWh)));
+    updateRangeFill(usageInput);
+  }
+}
+
+function syncUsageToBill(kWhValue) {
+  const bill = Math.round(kWhValue * BILL_RATE_DEFAULT / 10) * 10;
+  const billInput = document.getElementById('entryMonthlyBill');
+  const billLabel = document.getElementById('entryBillValue');
+  if (billInput) {
+    billInput.value = String(Math.max(Number(billInput.min), Math.min(Number(billInput.max), bill)));
+    updateRangeFill(billInput);
+  }
+  if (billLabel) billLabel.textContent = `$${Math.max(50, Math.min(600, bill))}`;
+}
+
 window.addEventListener('DOMContentLoaded', async () => {
-  // Force-collapse all .doc-details elements on load, overriding browser
-  // state-restoration which can re-open them across page loads.
   document.querySelectorAll('.doc-details').forEach((el) => {
     el.open = false;
   });
 
   document.querySelectorAll('input[type="range"], select').forEach((input) => {
-    input.addEventListener('input', updateCalculator);
-    input.addEventListener('change', updateCalculator);
+    input.addEventListener('input', () => { updateRangeFill(input); updateCalculator(); });
+    input.addEventListener('change', () => { updateRangeFill(input); updateCalculator(); });
   });
+
+  // Bill slider ↔ monthly usage sync
+  const entryBillInput = document.getElementById('entryMonthlyBill');
+  const entryBillLabel = document.getElementById('entryBillValue');
+  const monthlyUsageInput = document.getElementById('monthlyUsage');
+  if (entryBillInput) {
+    entryBillInput.addEventListener('input', () => {
+      const v = Number(entryBillInput.value);
+      if (entryBillLabel) entryBillLabel.textContent = `$${v}`;
+      updateRangeFill(entryBillInput);
+      syncBillToUsage(v);
+      updateCalculator();
+    });
+  }
+  if (monthlyUsageInput) {
+    monthlyUsageInput.addEventListener('input', () => {
+      syncUsageToBill(Number(monthlyUsageInput.value));
+    });
+  }
+
+  // Payment toggle — Cash / Financing
+  const paymentCash = document.getElementById('paymentCash');
+  const paymentFinancing = document.getElementById('paymentFinancing');
+  const loanTermSelect = document.getElementById('loanTerm');
+  if (paymentCash && paymentFinancing && loanTermSelect) {
+    paymentCash.addEventListener('click', () => {
+      paymentCash.classList.add('payment-btn--active');
+      paymentFinancing.classList.remove('payment-btn--active');
+      loanTermSelect.value = '0';
+      updateCalculator();
+    });
+    paymentFinancing.addEventListener('click', () => {
+      paymentFinancing.classList.add('payment-btn--active');
+      paymentCash.classList.remove('payment-btn--active');
+      if (loanTermSelect.value === '0') loanTermSelect.value = '10';
+      updateCalculator();
+    });
+  }
   document.getElementById('backupGatewayEnabled').addEventListener('change', updateCalculator);
   document.getElementById('solveButton').addEventListener('click', solveBestSystemSize);
   document.getElementById('solvePaybackButton').addEventListener('click', solveFastestPayback);
@@ -173,4 +243,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   await loadSampleGoogleRoofData();
   renderGoogleLookupResult();
   updateCalculator();
+  syncAllRangeFills();
+  // Sync bill display to match initial monthly usage default
+  if (monthlyUsageInput) syncUsageToBill(Number(monthlyUsageInput.value));
 });

@@ -1,7 +1,6 @@
 // Solar flux GeoTIFF overlay using Google Maps JS API + geotiff.js + proj4.js
 let SOLAR_MAP_API_KEY = null;
 const IRON_PALETTE = ['00000A','91009C','E64616','FEB400','FFFFF6'];
-const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
 function utmProj4ForLng(lng) {
   const zone = Math.floor((lng + 180) / 6) + 1;
@@ -12,17 +11,12 @@ let solarMap = null;
 let solarOverlays = [];
 let googleMapsApiReady = false;
 
-// Cached canvases and bounds from last fetch
 let cachedRgbCanvas = null;
 let cachedRgbBounds = null;
 let cachedAnnualCanvas = null;
 let cachedAnnualBounds = null;
-let cachedMonthlyCanvases = null; // array of 12
-let cachedMonthlyBounds = null;
-
-// Active overlay state: 'annual' | 'monthly' | 'none'
 let activeFluxMode = 'annual';
-let activeMonth = 0; // 0-11
+let activeMonth = 0;
 
 function onGoogleMapsApiLoaded() {
   googleMapsApiReady = true;
@@ -31,6 +25,24 @@ function onGoogleMapsApiLoaded() {
   if (typeof googleSolarRawPayload !== 'undefined' && googleSolarRawPayload) {
     updateSolarMapFromPayload(googleSolarRawPayload);
   }
+  initAddressAutocomplete();
+}
+
+function initAddressAutocomplete() {
+  const input = document.getElementById('googleAddress');
+  if (!input || !google.maps.places) return;
+  const autocomplete = new google.maps.places.Autocomplete(input, {
+    types: ['address'],
+    componentRestrictions: { country: 'us' },
+    fields: ['formatted_address'],
+  });
+  autocomplete.addListener('place_changed', () => {
+    const place = autocomplete.getPlace();
+    if (place.formatted_address) {
+      input.value = place.formatted_address;
+    }
+    if (typeof lookupGoogleRoof === 'function') lookupGoogleRoof();
+  });
 }
 
 function initSolarMap(lat, lng, zoom) {
@@ -83,121 +95,7 @@ function setMapLoading(loading) {
   }
 }
 
-function syncFluxControlState() {
-  const btnAnnual = document.getElementById('solarBtnAnnual');
-  const btnMonthly = document.getElementById('solarBtnMonthly');
-  const btnNone = document.getElementById('solarBtnNone');
-  const monthSelect = document.getElementById('solarMonthSelect');
-  if (!btnAnnual) return;
-  const btnStyle = (active) => ({
-    background: active ? 'rgba(255,255,255,0.25)' : 'transparent',
-    color: '#fff', border: '1px solid rgba(255,255,255,0.35)',
-    borderRadius: '4px', padding: '2px 8px', cursor: 'pointer',
-    fontSize: '11px', fontFamily: 'inherit',
-  });
-  Object.assign(btnAnnual.style, btnStyle(activeFluxMode === 'annual'));
-  Object.assign(btnMonthly.style, btnStyle(activeFluxMode === 'monthly'));
-  Object.assign(btnNone.style, btnStyle(activeFluxMode === 'none'));
-  if (monthSelect) {
-    monthSelect.style.display = activeFluxMode === 'monthly' ? 'block' : 'none';
-    monthSelect.value = activeMonth;
-  }
-}
 
-function ensureFluxControls() {
-  const mapDiv = document.getElementById('googleLookupMap');
-  if (!mapDiv || document.getElementById('solarFluxControls')) return;
-
-  // Use the outer wrap (lookup-map-wrap) so overflow:hidden on the frame doesn't clip controls
-  const frame = mapDiv.parentElement;
-  const wrap = frame.parentElement;
-  wrap.style.position = 'relative';
-
-  const ctrl = document.createElement('div');
-  ctrl.id = 'solarFluxControls';
-  Object.assign(ctrl.style, {
-    position: 'absolute', bottom: '8px', left: '50%',
-    transform: 'translateX(-50%)',
-    display: 'flex', alignItems: 'center', gap: '6px',
-    background: 'rgba(0,0,0,0.6)', borderRadius: '6px',
-    padding: '4px 8px', zIndex: '5', whiteSpace: 'nowrap',
-  });
-
-  const btnStyle = (active) => ({
-    background: active ? 'rgba(255,255,255,0.25)' : 'transparent',
-    color: '#fff', border: '1px solid rgba(255,255,255,0.35)',
-    borderRadius: '4px', padding: '2px 8px', cursor: 'pointer',
-    fontSize: '11px', fontFamily: 'inherit',
-  });
-
-  function makeBtn(label, id) {
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.textContent = label;
-    b.id = id;
-    Object.assign(b.style, btnStyle(false));
-    return b;
-  }
-
-  const btnAnnual = makeBtn('Annual', 'solarBtnAnnual');
-  const btnMonthly = makeBtn('Monthly', 'solarBtnMonthly');
-  const btnNone = makeBtn('None', 'solarBtnNone');
-
-  const monthSelect = document.createElement('select');
-  monthSelect.id = 'solarMonthSelect';
-  Object.assign(monthSelect.style, {
-    background: 'rgba(0,0,0,0.5)', color: '#fff',
-    border: '1px solid rgba(255,255,255,0.35)', borderRadius: '4px',
-    padding: '2px 4px', fontSize: '11px', cursor: 'pointer',
-    display: 'none',
-  });
-  MONTH_NAMES.forEach((m, i) => {
-    const opt = document.createElement('option');
-    opt.value = i;
-    opt.textContent = m;
-    monthSelect.appendChild(opt);
-  });
-  monthSelect.value = activeMonth;
-
-  ctrl.appendChild(btnAnnual);
-  ctrl.appendChild(btnMonthly);
-  ctrl.appendChild(monthSelect);
-  ctrl.appendChild(btnNone);
-  // Append to wrap (outer div), not frame (has overflow:hidden)
-  wrap.appendChild(ctrl);
-
-  function updateBtnStyles() {
-    Object.assign(btnAnnual.style, btnStyle(activeFluxMode === 'annual'));
-    Object.assign(btnMonthly.style, btnStyle(activeFluxMode === 'monthly'));
-    Object.assign(btnNone.style, btnStyle(activeFluxMode === 'none'));
-    monthSelect.style.display = activeFluxMode === 'monthly' ? 'block' : 'none';
-  }
-
-  btnAnnual.addEventListener('click', () => {
-    activeFluxMode = 'annual';
-    updateBtnStyles();
-    applyFluxOverlay();
-  });
-
-  btnMonthly.addEventListener('click', () => {
-    activeFluxMode = 'monthly';
-    updateBtnStyles();
-    applyFluxOverlay();
-  });
-
-  btnNone.addEventListener('click', () => {
-    activeFluxMode = 'none';
-    updateBtnStyles();
-    applyFluxOverlay();
-  });
-
-  monthSelect.addEventListener('change', () => {
-    activeMonth = Number(monthSelect.value);
-    if (activeFluxMode === 'monthly') applyFluxOverlay();
-  });
-
-  updateBtnStyles();
-}
 
 function applyFluxOverlay() {
   // Remove existing flux overlays (keep RGB base = index 0)
@@ -205,38 +103,45 @@ function applyFluxOverlay() {
     solarOverlays[i].setMap(null);
     solarOverlays.splice(i, 1);
   }
-
-  if (activeFluxMode === 'annual' && cachedAnnualCanvas && cachedAnnualBounds) {
+  if (cachedAnnualCanvas && cachedAnnualBounds) {
     addGroundOverlay(cachedAnnualCanvas, cachedAnnualBounds, 0.8);
-  } else if (activeFluxMode === 'monthly' && cachedMonthlyCanvases && cachedMonthlyBounds) {
-    const canvas = cachedMonthlyCanvases[activeMonth];
-    if (canvas) addGroundOverlay(canvas, cachedMonthlyBounds, 0.8);
   }
 }
 
 function paletteColor(value) {
-  const idx = Math.min(IRON_PALETTE.length - 1, Math.floor(value * IRON_PALETTE.length));
-  const hex = IRON_PALETTE[idx];
-  return {
+  // Linear interpolation between palette stops for smooth gradients
+  const stops = IRON_PALETTE.map(hex => ({
     r: parseInt(hex.substring(0, 2), 16),
     g: parseInt(hex.substring(2, 4), 16),
     b: parseInt(hex.substring(4, 6), 16),
+  }));
+  const n = stops.length - 1;
+  const scaled = Math.max(0, Math.min(1, value)) * n;
+  const lo = Math.floor(scaled);
+  const hi = Math.min(n, lo + 1);
+  const t = scaled - lo;
+  return {
+    r: Math.round(stops[lo].r + t * (stops[hi].r - stops[lo].r)),
+    g: Math.round(stops[lo].g + t * (stops[hi].g - stops[lo].g)),
+    b: Math.round(stops[lo].b + t * (stops[hi].b - stops[lo].b)),
   };
 }
 
-function renderSingleBand(band, width, height) {
+function renderSingleBand(band, width, height, fixedMin, fixedMax) {
   const canvas = document.createElement('canvas');
   canvas.width = width;
   canvas.height = height;
   const ctx = canvas.getContext('2d');
   const imgData = ctx.createImageData(width, height);
-  let min = Infinity;
-  let max = -Infinity;
-  for (let i = 0; i < band.length; i++) {
-    if (band[i] < min) min = band[i];
-    if (band[i] > max) max = band[i];
+  let min = fixedMin ?? Infinity;
+  let max = fixedMax ?? -Infinity;
+  if (fixedMin == null || fixedMax == null) {
+    for (let i = 0; i < band.length; i++) {
+      if (band[i] < min) min = band[i];
+      if (band[i] > max) max = band[i];
+    }
   }
-  const range = max - min || 1;
+  const range = (max - min) || 1;
   for (let i = 0; i < band.length; i++) {
     const color = paletteColor((band[i] - min) / range);
     const px = i * 4;
@@ -281,6 +186,40 @@ async function fetchGeoTiff(url) {
     width: image.getWidth(),
     height: image.getHeight(),
   };
+}
+
+function renderRoofMask(band, width, height) {
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  const imgData = ctx.createImageData(width, height);
+  for (let i = 0; i < band.length; i++) {
+    const px = i * 4;
+    imgData.data[px]     = 43;   // teal R
+    imgData.data[px + 1] = 181;  // teal G
+    imgData.data[px + 2] = 160;  // teal B
+    imgData.data[px + 3] = band[i] > 0 ? 200 : 0;
+  }
+  ctx.putImageData(imgData, 0, 0);
+  return canvas;
+}
+
+function renderMaskBand(band, width, height) {
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  const imgData = ctx.createImageData(width, height);
+  for (let i = 0; i < band.length; i++) {
+    const px = i * 4;
+    imgData.data[px] = 255;
+    imgData.data[px + 1] = 255;
+    imgData.data[px + 2] = 255;
+    imgData.data[px + 3] = band[i] > 0 ? 255 : 0;
+  }
+  ctx.putImageData(imgData, 0, 0);
+  return canvas;
 }
 
 function applyMask(fluxCanvas, maskCanvas) {
@@ -331,18 +270,24 @@ async function updateSolarMapFromPayload(payload) {
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
 
   const roofArea = Number(payload?.raw?.solarPotential?.wholeRoofStats?.areaMeters2) || 0;
-  const radiusMeters = Math.max(15, Math.min(60, Math.round(Math.sqrt(roofArea) * 1.2)));
-  const mapPx = document.getElementById('googleLookupMap')?.offsetWidth || 400;
-  const zoom = Math.log2(156543 * Math.cos(lat * Math.PI / 180) * mapPx * 1.25 / (2 * radiusMeters));
+  // radiusMeters: large enough to exceed the visible area; keep under 100m so 0.1m pixels stay manageable
+  const radiusMeters = 100;
+  // Zoom: based on roof size for good property detail, independent of radiusMeters
+  const roofDiagonal = roofArea > 0 ? Math.sqrt(roofArea) * 1.41 : 20;
+  const targetVisibleMeters = Math.max(50, Math.min(130, roofDiagonal * 3));
+  const mapEl = document.getElementById('googleLookupMap');
+  const mapPx = window._mapContainerWidth ||
+                (mapEl?.getBoundingClientRect().width) ||
+                (mapEl?.offsetWidth) || 900;
+  window._mapContainerWidth = null;
+  const zoom = Math.log2(156543 * Math.cos(lat * Math.PI / 180) * mapPx / targetVisibleMeters);
 
   activeFluxMode = 'annual';
   activeMonth = 0;
-  syncFluxControlState();
   initSolarMap(lat, lng, zoom);
   clearSolarOverlays();
   cachedRgbCanvas = null;
   cachedAnnualCanvas = null;
-  cachedMonthlyCanvases = null;
   setMapLoading(true);
 
   try {
@@ -350,9 +295,9 @@ async function updateSolarMapFromPayload(payload) {
     layerUrl.searchParams.set('location.latitude', lat);
     layerUrl.searchParams.set('location.longitude', lng);
     layerUrl.searchParams.set('radiusMeters', String(radiusMeters));
-    layerUrl.searchParams.set('view', 'IMAGERY_AND_ALL_FLUX_LAYERS');
+    layerUrl.searchParams.set('view', 'IMAGERY_AND_ANNUAL_FLUX_LAYERS');
     layerUrl.searchParams.set('requiredQuality', 'HIGH');
-    layerUrl.searchParams.set('pixelSizeMeters', '0.1');
+    layerUrl.searchParams.set('pixelSizeMeters', '0.25');
     layerUrl.searchParams.set('key', SOLAR_MAP_API_KEY);
 
     const resp = await fetch(layerUrl.toString());
@@ -369,46 +314,26 @@ async function updateSolarMapFromPayload(payload) {
       return u.toString();
     };
 
-    const [rgbData, maskData, fluxData, monthlyData] = await Promise.all([
+    const [rgbData, fluxData, maskData] = await Promise.all([
       fetchGeoTiff(addKey(layers.rgbUrl)),
-      fetchGeoTiff(addKey(layers.maskUrl)),
       fetchGeoTiff(addKey(layers.annualFluxUrl)),
-      fetchGeoTiff(addKey(layers.monthlyFluxUrl)),
+      fetchGeoTiff(addKey(layers.maskUrl)),
     ]);
 
-    // RGB base layer
+    // RGB base layer — must match the same coordinate space as the flux overlay
     const rgbCanvas = renderRgb(rgbData.rasters, rgbData.width, rgbData.height);
     const rgbBounds = bboxToLatLngBounds(rgbData.bbox, lng, rgbData.geoKeys);
     cachedRgbCanvas = rgbCanvas;
     cachedRgbBounds = rgbBounds;
     addGroundOverlay(rgbCanvas, rgbBounds, 1.0);
 
-    // Mask canvas (used for both annual and monthly)
-    const maskCanvas = renderSingleBand(maskData.rasters[0], maskData.width, maskData.height);
-
-    // Annual flux overlay
-    const annualCanvas = renderSingleBand(fluxData.rasters[0], fluxData.width, fluxData.height);
-    applyMask(annualCanvas, maskCanvas);
+    // Annual flux with iron palette, masked to roof pixels only
+    const fluxCanvas = renderSingleBand(fluxData.rasters[0], fluxData.width, fluxData.height, 0, 1800);
+    const maskCanvas = renderMaskBand(maskData.rasters[0], maskData.width, maskData.height);
+    applyMask(fluxCanvas, maskCanvas);
     const fluxBounds = bboxToLatLngBounds(fluxData.bbox, lng, fluxData.geoKeys);
-    cachedAnnualCanvas = annualCanvas;
+    cachedAnnualCanvas = fluxCanvas;
     cachedAnnualBounds = fluxBounds;
-
-    // Monthly flux overlays (12 bands)
-    const monthlyBounds = bboxToLatLngBounds(monthlyData.bbox, lng, monthlyData.geoKeys);
-    cachedMonthlyBounds = monthlyBounds;
-    cachedMonthlyCanvases = [];
-    for (let m = 0; m < 12; m++) {
-      const band = monthlyData.rasters[m];
-      if (band) {
-        const mc = renderSingleBand(band, monthlyData.width, monthlyData.height);
-        applyMask(mc, maskCanvas);
-        cachedMonthlyCanvases.push(mc);
-      } else {
-        cachedMonthlyCanvases.push(null);
-      }
-    }
-
-    ensureFluxControls();
     applyFluxOverlay();
   } catch (err) {
     console.error('Solar flux overlay error:', err);

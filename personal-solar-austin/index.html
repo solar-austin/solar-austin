@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Solar Potential — Austin</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/personal-solar-austin/styles.css" />
+</head>
+<body>
+
+  <!-- ── Phase 1: Hero ──────────────────────────────────────────────────────── -->
+  <section id="heroSection" class="hero">
+    <div class="hero-content">
+      <h1 class="hero-title">Unlock your solar potential</h1>
+      <p class="hero-sub">Discover how to go solar and get profit from your roof space. No registration needed.</p>
+
+      <div class="hero-search-row">
+        <div class="hero-input-wrap">
+          <svg class="hero-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+          <input type="text" id="addressInput" class="hero-input" placeholder="Enter your address" autocomplete="off" />
+        </div>
+        <button type="button" class="hero-btn" id="submitBtn">Estimate now</button>
+      </div>
+
+      <p id="lookupStatus" class="hero-status"></p>
+    </div>
+
+    <div class="hero-illustration" aria-hidden="true"></div>
+  </section>
+
+  <!-- ── Phase 2: Calculator (hidden until submit) ──────────────────────────── -->
+  <div id="calculatorSection" hidden>
+    <div class="page-wrap">
+
+      <div class="layout" id="mainLayout">
+
+        <!-- Left panel -->
+        <aside class="left-panel" id="leftPanel">
+          <div class="card" id="entryCard">
+
+            <p class="card-section-head">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+              Property information
+            </p>
+
+            <p class="calc-address" id="calcAddress"></p>
+
+            <label class="field">
+              <span class="field-label-row">
+                <span>Monthly electricity bill</span>
+                <span style="text-align:right"><strong id="billDisplay">$150</strong><br><span id="billKwhDisplay" style="font-size:0.78rem;color:var(--muted);font-weight:400"></span></span>
+              </span>
+              <input type="range" id="billSlider" class="slider" min="50" max="600" step="10" value="150" />
+              <div class="tick-marks">
+                <span>$50</span><span>$200</span><span>$400</span><span>$600</span>
+              </div>
+            </label>
+
+            <p class="card-section-head" style="margin-top:20px">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+              Payment options
+            </p>
+
+            <div class="toggle-group">
+              <button type="button" class="toggle-btn active" id="btnCash">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                Cash
+              </button>
+              <button type="button" class="toggle-btn" id="btnFinancing">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/></svg>
+                Financing
+              </button>
+            </div>
+
+            <div class="slider-group">
+              <label class="field">
+                <span class="field-label-row">
+                  <span>Solar system size</span>
+                  <strong id="systemSizeDisplay">9.0 kW</strong>
+                </span>
+                <input type="range" id="systemSizeSlider" class="slider" min="0" max="32" step="0.1" value="9" />
+              </label>
+              <label class="field">
+                <span class="field-label-row">
+                  <span>Battery size</span>
+                  <strong id="batteryDisplay">None</strong>
+                </span>
+                <input type="range" id="batterySlider" class="slider" min="0" max="30" step="0.5" value="0" />
+              </label>
+            </div>
+
+          </div>
+
+          <div class="card" id="sysCard" style="margin-top:18px" hidden>
+            <h3>System cost</h3>
+            <table class="system-table">
+              <tr><td>Solar panels</td><td id="sysSolarCost">—</td></tr>
+              <tr><td>Battery</td><td id="sysBatteryCost">—</td></tr>
+              <tr id="sysRebateRow"><td>AE rebate</td><td id="sysRebate">—</td></tr>
+              <tr class="sys-total-row"><td>Total</td><td id="sysInstallCost">—</td></tr>
+            </table>
+          </div>
+
+        </aside>
+
+        <!-- Right column -->
+        <div class="right-col" id="rightCol">
+
+          <!-- Map -->
+          <div class="map-wrap" id="mapWrap">
+            <div id="solarMap"></div>
+          </div>
+
+          <!-- Results -->
+          <div id="results" hidden>
+
+            <div class="good-news-banner">
+              <p class="banner-label">Good news, you have a great solar potential!</p>
+              <div class="banner-cards">
+                <div class="banner-stat">
+                  <span class="banner-stat-label">30 year savings</span>
+                  <span class="banner-stat-value" id="stat20yrSavings">—</span>
+                </div>
+                <div class="banner-stat">
+                  <span class="banner-stat-label">Average bill change</span>
+                  <span class="banner-stat-value"><span id="statBillBefore">—</span> → <span id="statBillAfter" class="stat-green">—</span></span>
+                </div>
+                <div class="banner-stat">
+                  <span class="banner-stat-label">Energy covered by solar</span>
+                  <span class="banner-stat-value" id="coverageLabel">—</span>
+                </div>
+                <div class="banner-stat">
+                  <span class="banner-stat-label">Payback period</span>
+                  <span class="banner-stat-value" id="sysPayback">—</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="results-grid">
+
+              <div class="card chart-card chart-card--full">
+                <h3>Monthly electric bill: with solar vs. without</h3>
+                <div class="chart-area"><canvas id="billSavingsChart"></canvas></div>
+              </div>
+
+              <div class="card chart-card chart-card--full">
+                <h3>Cost analysis for 30 years</h3>
+                <div class="chart-area"><canvas id="costChart"></canvas></div>
+              </div>
+
+            </div>
+
+            <div class="card" style="margin-top:18px">
+              <h3>Electricity from solar vs. your monthly energy use</h3>
+              <div class="chart-area chart-area--tall"><canvas id="energyChart"></canvas></div>
+            </div>
+
+            <div class="card impact-card" style="margin-top:18px">
+              <h3>Your environmental impact after going solar</h3>
+              <p class="impact-sub" id="impactSub">By going solar, your system will avoid — metric tons of CO₂e per year, equivalent to:</p>
+              <div class="impact-row">
+                <div class="impact-stat">
+                  <svg width="65" height="65" viewBox="0 0 65 65" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M0.5 20.5L32.5 0.5L64.5 20.5H0.5Z" fill="white" stroke="#111827" stroke-linecap="round" stroke-linejoin="round"/><rect x="25.5" y="12.5" width="14" height="4" fill="#E5E7EB" stroke="#111827" stroke-linecap="round" stroke-linejoin="round"/><rect x="2.5" y="20.5" width="1" height="44" rx="0.5" fill="#111827"/><rect x="61.5" y="20.5" width="1" height="44" rx="0.5" fill="#111827"/><path d="M12.2545 39.5077C11.4767 38.1744 12.4385 36.5 13.9821 36.5H51.0179C52.5615 36.5 53.5233 38.1744 52.7455 39.5077L48.0788 47.5077C47.7204 48.1222 47.0626 48.5 46.3513 48.5H18.6487C17.9374 48.5 17.2796 48.1222 16.9212 47.5077L12.2545 39.5077Z" fill="#111827"/><path d="M8.5 48.5C8.5 44.0817 12.0817 40.5 16.5 40.5H48.5C52.9183 40.5 56.5 44.0817 56.5 48.5V57.5H8.5V48.5Z" fill="#FF7B68" stroke="#111827" stroke-linecap="round" stroke-linejoin="round"/><path d="M16.4107 33.8444C17.1491 31.2722 19.5017 29.5 22.1778 29.5H42.8222C45.4983 29.5 47.8509 31.2722 48.5893 33.8444L50.5 40.5H14.5L16.4107 33.8444Z" fill="white" stroke="#111827" stroke-linecap="round" stroke-linejoin="round"/><circle cx="50.5" cy="51.5" r="3" fill="white" stroke="#111827" stroke-linecap="round" stroke-linejoin="round"/><circle cx="14.5" cy="51.5" r="3" fill="white" stroke="#111827" stroke-linecap="round" stroke-linejoin="round"/><path d="M21.5 53.6818C21.5 49.1631 25.1631 45.5 29.6818 45.5H35.3182C39.8369 45.5 43.5 49.1631 43.5 53.6818C43.5 54.1337 43.1337 54.5 42.6818 54.5H22.3182C21.8663 54.5 21.5 54.1337 21.5 53.6818Z" fill="white" stroke="#111827" stroke-linecap="round" stroke-linejoin="round"/><path d="M11.5 57.5H17.5V61.5C17.5 63.1569 16.1569 64.5 14.5 64.5C12.8431 64.5 11.5 63.1569 11.5 61.5V57.5Z" fill="#E5E7EB" stroke="#111827"/><path d="M47.5 57.5H53.5V61.5C53.5 63.1569 52.1569 64.5 50.5 64.5C48.8431 64.5 47.5 63.1569 47.5 61.5V57.5Z" fill="#E5E7EB" stroke="#111827"/><path d="M46.5 40.5C46.5 37.7386 44.0376 35.5 41 35.5C37.9624 35.5 35.5 37.7386 35.5 40.5" stroke="#111827" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  <div class="impact-text">
+                    <span class="impact-value" id="impactMiles">—</span>
+                    <span class="impact-label">Car miles avoided</span>
+                  </div>
+                </div>
+                <div class="impact-stat">
+                  <svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M18 4L8.5 20.5H16L4.5 38.5H11.5L1.5 53.5H40.5L29 37H36.5L24 20L31 19L18 4Z" fill="#26C0B4" stroke="#111827" stroke-linecap="round" stroke-linejoin="round"/><path d="M17 53.5H25V62H17V53.5Z" fill="#F98316" stroke="#111827" stroke-linecap="round" stroke-linejoin="round"/><rect x="42" y="5" width="20" height="43" rx="10" fill="#CCF6F0" stroke="#111827" stroke-linecap="round" stroke-linejoin="round"/><path d="M48 37L52 40.5V61.5" stroke="#111827" stroke-linecap="round" stroke-linejoin="round"/><path d="M49 61.5H55" stroke="#111827" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  <div class="impact-text">
+                    <span class="impact-value" id="impactTrees">—</span>
+                    <span class="impact-label">Trees planted</span>
+                  </div>
+                </div>
+                <div class="impact-stat">
+                  <svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M18 52.6182C18 52.2394 18.214 51.8931 18.5528 51.7237L31.5528 45.2237C31.8343 45.083 32.1657 45.083 32.4472 45.2237L45.4472 51.7237C45.786 51.8931 46 52.2394 46 52.6182V55.0001C46 55.5524 45.5523 56.0001 45 56.0001H19C18.4477 56.0001 18 55.5524 18 55.0001V52.6182Z" fill="#85AFF6" stroke="#111827" stroke-linecap="round" stroke-linejoin="round"/><path d="M2 36.0787C2 34.9191 2.64201 33.8591 3.65836 33.3405L31.5528 19.1077C31.8343 18.9641 32.1657 18.9641 32.4472 19.1077L60.3416 33.3405C61.358 33.8591 62 34.9191 62 36.0787V40.9789C62 41.6624 61.3543 42.1527 60.7127 41.9563L32.2873 33.2541C32.0999 33.1967 31.9001 33.1967 31.7127 33.2541L3.28735 41.9563C2.64574 42.1527 2 41.6624 2 40.9789V36.0787Z" fill="#85AFF6" stroke="#111827" stroke-linecap="round" stroke-linejoin="round"/><path d="M56 28.5V26C56 25.4477 55.5523 25 55 25H52C51.4477 25 51 25.4477 51 26V26.5" stroke="#111827" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 28.5V26C8 25.4477 8.44772 25 9 25H12C12.5523 25 13 25.4477 13 26V26.5" stroke="#111827" stroke-linecap="round" stroke-linejoin="round"/><path d="M26 9C26 7 29 1 32 1C35 1 38 7 38 9C38 12.1855 38 42.0071 38 54.0206C38 56.782 35.7614 59 33 59H31C28.2386 59 26 56.782 26 54.0206C26 42.0071 26 12.1855 26 9Z" fill="white" stroke="#111827" stroke-linecap="round" stroke-linejoin="round"/><path d="M30.3729 52.8517C30.4463 52.3621 30.8668 52 31.3618 52H32.6395C33.1345 52 33.555 52.3621 33.6284 52.8517L34.5929 59.2815C34.8385 60.9191 34.0763 62.7153 32.4391 62.9642C32.2883 62.9871 32.1411 63 32.0006 63C31.8602 63 31.7129 62.9871 31.5622 62.9642C29.925 62.7153 29.1628 60.9191 29.4084 59.2815L30.3729 52.8517Z" fill="#85AFF6" stroke="#111827" stroke-linecap="round" stroke-linejoin="round"/><path d="M53.5 46V55.5" stroke="#111827" stroke-linecap="round" stroke-linejoin="round"/><path d="M53.5 57.5V59.5" stroke="#111827" stroke-linecap="round" stroke-linejoin="round"/><path d="M10.5 45V49.5" stroke="#111827" stroke-linecap="round" stroke-linejoin="round"/><path d="M10.5 51.5V58.5" stroke="#111827" stroke-linecap="round" stroke-linejoin="round"/><path d="M29.5 8.49997C31 7 33 7.00001 34.5 8.49997" stroke="#111827" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  <div class="impact-text">
+                    <span class="impact-value" id="impactFlights">—</span>
+                    <span class="impact-label">Long haul flights avoided</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </div><!-- end #results -->
+        </div><!-- end .right-col -->
+      </div><!-- end .layout -->
+    </div><!-- end .page-wrap -->
+  </div><!-- end #calculatorSection -->
+
+  <!-- Hidden calc inputs read by getInputs() from the shared modules -->
+  <div id="hiddenInputs" style="display:none" aria-hidden="true">
+    <input id="monthlyUsage"    type="range" value="1034" min="300" max="2500" step="10" />
+    <input id="systemSize"      type="range" value="9"    min="0"   max="32"   step="0.1" />
+    <input id="batteryPower"    type="range" value="0"    min="0"   max="30"   step="0.5" />
+    <input id="batteryCost"     type="range" value="1100" min="150" max="2000" step="25" />
+    <input id="installCost"     type="range" value="2950" min="1000" max="6000" step="50" />
+    <input id="baseInstallCost" type="range" value="4800" min="0"   max="20000" step="100" />
+    <input id="loanTerm"        type="range" value="0" />
+    <input id="loanInterest"    type="range" value="6"    min="0"   max="15"   step="0.1" />
+    <input id="retailRate"      type="range" value="11.6" min="0"   max="30"   step="0.1" />
+    <input id="buybackRate"     type="range" value="9.91" min="0"   max="30"   step="0.1" />
+    <input id="rateEscalation"  type="range" value="0"    min="0"   max="10"   step="0.1" />
+    <input id="dayMonth"        type="range" value="6"    min="0"   max="11"   step="1" />
+    <input id="productionPerKw" type="range" value="1500" min="800" max="2200" step="10" />
+    <input id="backupGatewayCost" type="range" value="1500" />
+    <input id="backupGatewayEnabled" type="checkbox" />
+    <input id="quotedSolarCost" type="number" value="30000" />
+    <select id="heatingType"><option value="gas" selected>Gas</option></select>
+    <select id="planType"><option value="value_of_solar" selected>Value of Solar</option></select>
+    <button id="btnCostEstimated" class="cost-mode-btn cost-mode-btn--active"></button>
+    <button id="btnCostQuoted" class="cost-mode-btn"></button>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/geotiff@2.1.3/dist-browser/geotiff.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.9.0/proj4.min.js"></script>
+  <script src="/personal-solar/map-overlay.js"></script>
+  <script>
+    document.getElementById('solarMap').id = 'googleLookupMap';
+  </script>
+  <script>
+    fetch('/.netlify/functions/solar-config')
+      .then(r => r.json())
+      .then(({ key }) => {
+        if (!key) return;
+        window._solarMapApiKey = key;
+        const s = document.createElement('script');
+        s.src = `https://maps.googleapis.com/maps/api/js?key=${key}&libraries=places&callback=onGoogleMapsApiLoaded`;
+        s.async = true; s.defer = true;
+        document.head.appendChild(s);
+      })
+      .catch(() => {});
+  </script>
+  <script>window._appMode = 'austin_energy';</script>
+  <script src="/personal-solar/utils.js"></script>
+  <script src="/personal-solar/config.js"></script>
+  <script src="/personal-solar/green-button.js"></script>
+  <script src="/personal-solar/google-solar.js"></script>
+  <script src="/personal-solar/calculations.js"></script>
+  <script src="/personal-solar/solar-model.js"></script>
+  <script src="/personal-solar-austin/app.js"></script>
+</body>
+</html>
