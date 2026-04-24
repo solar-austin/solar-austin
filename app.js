@@ -2559,6 +2559,7 @@ const DEFAULT_INPUTS = {
   mix_include_seasonal: false,
   show_new_power_together: false,
   p_allow_geo_solver: false,
+  p_allow_ee_dr_solver: false,
 };
 
 const STARTING_FLEET_INPUTS = {
@@ -2771,6 +2772,7 @@ function resetInputs() {
   Object.keys(TCOS_OVERRIDES).forEach((key) => delete TCOS_OVERRIDES[key]);
   Object.entries(DEFAULT_INPUTS).forEach(([id, value]) => {
     if (id === 'p_allow_geo_solver') return;
+    if (id === 'p_allow_ee_dr_solver') return;
     const el = document.getElementById(id);
     if (!el) return;
     if (el.type === 'checkbox') {
@@ -2921,18 +2923,21 @@ function autoSolveScenario({ zeroEmissions = false } = {}) {
   const distSolarTargetMw = +document.getElementById('p_dist_solar').value;
   const importAllowance = +document.getElementById('p_import_allowance').value;
   const allowGeo = document.getElementById('p_allow_geo_solver')?.checked ?? false;
+  const allowEeDr = document.getElementById('p_allow_ee_dr_solver')?.checked ?? false;
   const gasBase = zeroEmissions ? 0 : +document.getElementById('p_gas_base').value;
   const gasPeak = zeroEmissions ? 0 : +document.getElementById('p_gas_peak').value;
   const coal = 0;
-  const ee = +document.getElementById('p_ee').value;
-  const dr = +document.getElementById('p_dr').value;
+  const eeSlider = +document.getElementById('p_ee').value;
+  const drSlider = +document.getElementById('p_dr').value;
+  let ee = eeSlider;
+  let dr = drSlider;
   const distBatt = +document.getElementById('p_dist_batt').value;
   const growth = +document.getElementById('p_growth').value;
   const tx = DEFAULT_TCOS;
   const goal = +document.getElementById('p_margin_goal').value;
   const relYear = +(document.getElementById('p_rel_year')?.value ?? (BASE_YEAR + YEARS - 1));
   const relYearIndex = Math.max(0, Math.min(YEARS - 1, relYear - BASE_YEAR));
-  let best = { totalCostM: Infinity, windTargetMw: DEFAULT_INPUTS.p_wind, solarTargetMw: DEFAULT_INPUTS.p_solar, geoTargetMw: DEFAULT_INPUTS.p_geo, batt: 0 };
+  let best = { totalCostM: Infinity, windTargetMw: DEFAULT_INPUTS.p_wind, solarTargetMw: DEFAULT_INPUTS.p_solar, geoTargetMw: DEFAULT_INPUTS.p_geo, batt: 0, ee: eeSlider, dr: drSlider };
   let bestFallback = null;
   const costTcosKeys = new Set(['nuke', 'biomass', 'gasBase', 'gasPeak', 'coal', 'ee', 'dr', 'exWind', 'exSolar', 'geo', 'newWind', 'newSolar', 'gap']);
   const candidateCache = new Map();
@@ -2951,7 +2956,7 @@ function autoSolveScenario({ zeroEmissions = false } = {}) {
   const BATTERY_VALS_COARSE = getSliderSearchValues('p_batt', 11, battMeta.min, battMeta.max, 1);
 
   function evaluateCandidate(windTargetMw, solarTargetMw, geoTargetMw, batt) {
-    const cacheKey = [windTargetMw, solarTargetMw, geoTargetMw, batt].join('|');
+    const cacheKey = [windTargetMw, solarTargetMw, geoTargetMw, batt, ee, dr].join('|');
     const cached = candidateCache.get(cacheKey);
     if (cached) return cached;
 
@@ -3024,7 +3029,7 @@ function autoSolveScenario({ zeroEmissions = false } = {}) {
       || candidate.minMarginPct > bestFallback.minMarginPct
       || (Math.abs(candidate.minMarginPct - bestFallback.minMarginPct) < 1e-9 && candidate.batt < bestFallback.batt)
     ) {
-      bestFallback = candidate;
+      bestFallback = { ...candidate, ee, dr };
     }
   }
 
@@ -3049,14 +3054,25 @@ function autoSolveScenario({ zeroEmissions = false } = {}) {
             }
           }
           if (bestFeasibleCandidate && bestFeasibleCandidate.totalCostM < best.totalCostM) {
-            best = bestFeasibleCandidate;
+            best = { ...bestFeasibleCandidate, ee, dr };
           }
         }
       }
     }
   }
 
-  evaluateGrid(WIND_TARGETS_COARSE, SOLAR_TARGETS_COARSE, GEO_TARGETS_COARSE, BATTERY_VALS_COARSE);
+  const eeMeta = getSliderMeta('p_ee', 0, 1200, 1);
+  const drMeta = getSliderMeta('p_dr', 0, 1200, 1);
+  const EE_VALS_COARSE = allowEeDr ? getSliderSearchValues('p_ee', 5, eeMeta.min, eeMeta.max, 1) : [eeSlider];
+  const DR_VALS_COARSE = allowEeDr ? getSliderSearchValues('p_dr', 5, drMeta.min, drMeta.max, 1) : [drSlider];
+
+  for (const eeVal of EE_VALS_COARSE) {
+    for (const drVal of DR_VALS_COARSE) {
+      ee = eeVal;
+      dr = drVal;
+      evaluateGrid(WIND_TARGETS_COARSE, SOLAR_TARGETS_COARSE, GEO_TARGETS_COARSE, BATTERY_VALS_COARSE);
+    }
+  }
 
   const windFineStep = 25;
   const solarFineStep = 25;
@@ -3085,7 +3101,28 @@ function autoSolveScenario({ zeroEmissions = false } = {}) {
     battFineStep,
   );
 
-  evaluateGrid(WIND_TARGETS_FINE, SOLAR_TARGETS_FINE, GEO_TARGETS_FINE, BATTERY_VALS_FINE);
+  const EE_VALS_FINE = allowEeDr
+    ? getDenseRangeValues(
+      Math.max(eeMeta.min, best.ee - 300),
+      Math.min(eeMeta.max, best.ee + 300),
+      100,
+    )
+    : [eeSlider];
+  const DR_VALS_FINE = allowEeDr
+    ? getDenseRangeValues(
+      Math.max(drMeta.min, best.dr - 300),
+      Math.min(drMeta.max, best.dr + 300),
+      100,
+    )
+    : [drSlider];
+
+  for (const eeVal of EE_VALS_FINE) {
+    for (const drVal of DR_VALS_FINE) {
+      ee = eeVal;
+      dr = drVal;
+      evaluateGrid(WIND_TARGETS_FINE, SOLAR_TARGETS_FINE, GEO_TARGETS_FINE, BATTERY_VALS_FINE);
+    }
+  }
 
   let solverMessage = '';
   if (best.totalCostM === Infinity) {
@@ -3101,6 +3138,10 @@ function autoSolveScenario({ zeroEmissions = false } = {}) {
   document.getElementById('p_solar').value = best.solarTargetMw;
   document.getElementById('p_geo').value = best.geoTargetMw;
   document.getElementById('p_batt').value = best.batt;
+  if (allowEeDr) {
+    document.getElementById('p_ee').value = best.ee;
+    document.getElementById('p_dr').value = best.dr;
+  }
   if (zeroEmissions) {
     document.getElementById('p_gas_base').value = 0;
     document.getElementById('p_gas_peak').value = 0;

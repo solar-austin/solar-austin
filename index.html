@@ -248,6 +248,10 @@
         <input type="checkbox" id="p_allow_geo_solver">
         <span class="has-tooltip" title="Auto-solver only. When unchecked, the solver treats geothermal as unavailable and only uses wind, solar, and battery. Manual geothermal scenarios still work normally.">Allow geothermal in auto-solve</span>
       </label>
+      <label class="left-toggle">
+        <input type="checkbox" id="p_allow_ee_dr_solver">
+        <span class="has-tooltip" title="Auto-solver only. When unchecked, the solver keeps EE and DR at their current slider values. When checked, the solver also searches over energy efficiency and demand response levels to find the lowest-cost feasible combination.">Allow EE/DR in auto-solve</span>
+      </label>
       <button class="btn-reset" onclick="resetInputs()">Reset</button>
       <div class="scenario-action-card">
         <div class="scenario-action-head">Scenario Actions</div>

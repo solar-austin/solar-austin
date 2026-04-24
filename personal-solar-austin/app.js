@@ -514,6 +514,157 @@ function onGoogleMapsApiLoaded() {
   }
 }
 
+// ── Bill source: estimate vs uploaded bill ────────────────────────────────────
+const MONTH_ABBREVS = ['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'];
+
+function parseMonthIndex(label) {
+  const m = String(label).toLowerCase().match(/^([a-z]+)/);
+  if (!m) return -1;
+  return MONTH_ABBREVS.indexOf(m[1].slice(0, 3));
+}
+
+// Build a 12-element [jan..dec] array from the parsed months, averaging duplicates,
+// filling missing months with the overall average.
+function buildMonthlyKwhArray(months) {
+  const buckets = Array.from({ length: 12 }, () => []);
+  for (const m of months) {
+    const idx = parseMonthIndex(m.label);
+    if (idx >= 0 && m.kwh > 0) buckets[idx].push(m.kwh);
+  }
+  const overall = Math.round(months.reduce((s, m) => s + m.kwh, 0) / Math.max(1, months.length));
+  return buckets.map((b) => (b.length > 0 ? Math.round(b.reduce((s, v) => s + v, 0) / b.length) : overall));
+}
+
+function applyBillData(result) {
+  const monthly = buildMonthlyKwhArray(result.months);
+  importedMonthlyKwh = monthly;
+
+  const avgKwh = result.average_monthly_kwh;
+  document.getElementById('monthlyUsage').value = String(Math.max(300, Math.min(2500, avgKwh)));
+
+  const avgBill = typeof calculateAustinEnergyUsageBill === 'function'
+    ? Math.round(calculateAustinEnergyUsageBill(avgKwh).total)
+    : Math.round(avgKwh * BILL_RATE);
+
+  setText('billResultKwh', `${avgKwh.toLocaleString()} kWh`);
+  setText('billResultBill', `$${avgBill}`);
+
+  const n = result.months.length;
+  const range = n > 1
+    ? `${result.months[0].label} – ${result.months[n - 1].label} · ${n} months`
+    : (result.months[0]?.label ?? '1 month');
+  const sourceNote = result.source === 'graph' ? ' · read from chart' : result.source === 'mixed' ? ' · table + chart' : '';
+  setText('billResultRange', range + sourceNote);
+
+  document.getElementById('billDropZone').hidden = false;
+  document.getElementById('billUploadProgress').hidden = true;
+  document.getElementById('billResult').hidden = false;
+
+  if (phaseTwo) runModel();
+}
+
+function clearBillData() {
+  importedMonthlyKwh = null;
+  document.getElementById('billDropZone').hidden = false;
+  document.getElementById('billUploadProgress').hidden = true;
+  document.getElementById('billResult').hidden = true;
+  document.getElementById('billDropError').hidden = true;
+  const fi = document.getElementById('billFileInput');
+  if (fi) fi.value = '';
+}
+
+async function handleBillFile(file) {
+  const dropZone   = document.getElementById('billDropZone');
+  const progress   = document.getElementById('billUploadProgress');
+  const statusEl   = document.getElementById('billUploadStatus');
+  const errorEl    = document.getElementById('billDropError');
+
+  errorEl.hidden = true;
+  dropZone.hidden = true;
+  progress.hidden = false;
+  statusEl.textContent = 'Reading bill…';
+
+  try {
+    const base64 = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload  = () => resolve(reader.result.split(',')[1]);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+
+    statusEl.textContent = 'Analyzing bill with AI…';
+
+    const response = await fetch('/.netlify/functions/parse-bill', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ file: base64, filename: file.name }),
+    });
+
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || 'Bill parsing failed.');
+
+    applyBillData(result);
+  } catch (err) {
+    progress.hidden = true;
+    dropZone.hidden = false;
+    errorEl.textContent = err.message || 'Failed to parse bill. Please try again.';
+    errorEl.hidden = false;
+  }
+}
+
+function initBillSource() {
+  const btnEstimate  = document.getElementById('btnEstimate');
+  const btnMyBill    = document.getElementById('btnMyBill');
+  const estimateMode = document.getElementById('estimateMode');
+  const myBillMode   = document.getElementById('myBillMode');
+  const fileInput    = document.getElementById('billFileInput');
+  const dropZone     = document.getElementById('billDropZone');
+  const browseBtn    = document.getElementById('billBrowseBtn');
+  const clearBtn     = document.getElementById('billResultClear');
+
+  btnEstimate?.addEventListener('click', () => {
+    btnEstimate.classList.add('active');
+    btnMyBill.classList.remove('active');
+    estimateMode.hidden = false;
+    myBillMode.hidden = true;
+    // Only clear bill data and re-run if a bill was actually uploaded
+    if (importedMonthlyKwh !== null) {
+      clearBillData();
+      if (phaseTwo) runModel();
+    }
+  });
+
+  btnMyBill?.addEventListener('click', () => {
+    btnMyBill.classList.add('active');
+    btnEstimate.classList.remove('active');
+    estimateMode.hidden = true;
+    myBillMode.hidden = false;
+    // Leave importedMonthlyKwh and model results untouched until a bill is uploaded
+  });
+
+  browseBtn?.addEventListener('click', () => fileInput?.click());
+
+  fileInput?.addEventListener('change', () => {
+    const file = fileInput.files[0];
+    if (file) handleBillFile(file);
+    fileInput.value = '';
+  });
+
+  dropZone?.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    dropZone.classList.add('drag-over');
+  });
+  dropZone?.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+  dropZone?.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dropZone.classList.remove('drag-over');
+    const file = e.dataTransfer.files[0];
+    if (file) handleBillFile(file);
+  });
+
+  clearBtn?.addEventListener('click', clearBillData);
+}
+
 // ── Wire up UI ───────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
 
@@ -566,6 +717,8 @@ document.addEventListener('DOMContentLoaded', () => {
     if (loanTermInput.value === '0') loanTermInput.value = '10';
     if (phaseTwo) runModel();
   });
+
+  initBillSource();
 
   // Load install cost lookup for benchmark pricing
   fetch('/personal-solar/install-cost-lookup.json')

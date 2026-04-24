@@ -494,3 +494,114 @@ body {
   .hero-search-row { flex-direction: column; }
   .hero-btn { width: 100%; }
 }
+
+/* ── Bill source toggle ──────────────────────────────────────────────────── */
+.bill-source-toggle { margin-bottom: 14px; }
+
+/* ── Bill drop zone ──────────────────────────────────────────────────────── */
+.bill-drop-zone {
+  border: 2px dashed rgba(43, 181, 160, 0.4);
+  border-radius: 10px;
+  padding: 16px 20px 14px;
+  text-align: center;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  background: rgba(43, 181, 160, 0.04);
+  user-select: none;
+}
+.bill-drop-zone:hover,
+.bill-drop-zone.drag-over {
+  background: rgba(43, 181, 160, 0.11);
+  border-color: var(--teal);
+}
+.bill-drop-zone svg {
+  width: 28px;
+  height: 28px;
+  color: var(--teal);
+  margin-bottom: 7px;
+}
+.bill-drop-title {
+  margin: 0 0 3px;
+  font-size: 0.87rem;
+  font-weight: 600;
+  color: var(--text);
+}
+.bill-drop-sub {
+  margin: 0 0 6px;
+  font-size: 0.83rem;
+  color: var(--muted);
+}
+.bill-browse-link {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  font-size: inherit;
+  color: var(--teal-dark);
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: underline;
+}
+.bill-browse-link:hover { color: var(--teal); }
+.bill-drop-hint {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+.bill-drop-error {
+  margin: 8px 0 0;
+  font-size: 0.82rem;
+  color: #dc2626;
+}
+
+/* ── Bill upload progress ────────────────────────────────────────────────── */
+.bill-upload-progress {
+  padding: 22px;
+  text-align: center;
+  font-size: 0.88rem;
+  color: var(--muted);
+}
+
+/* ── Bill result ─────────────────────────────────────────────────────────── */
+.bill-result {
+  padding: 14px 16px;
+  background: var(--teal-light);
+  border: 1.5px solid rgba(43, 181, 160, 0.28);
+  border-radius: 10px;
+  margin-top: 10px;
+}
+.bill-result-stats {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 8px;
+}
+.bill-result-stat { flex: 1; }
+.bill-result-label {
+  display: block;
+  font-size: 0.76rem;
+  color: var(--muted);
+  margin-bottom: 2px;
+}
+.bill-result-val {
+  font-size: 1.08rem;
+  font-weight: 700;
+  color: var(--teal-dark);
+}
+.bill-result-range {
+  margin: 0 0 10px;
+  font-size: 0.76rem;
+  color: var(--muted);
+}
+.bill-result-clear {
+  background: none;
+  border: 1px solid rgba(43, 181, 160, 0.4);
+  border-radius: 6px;
+  padding: 4px 12px;
+  font-size: 0.79rem;
+  font-weight: 600;
+  color: var(--teal-dark);
+  cursor: pointer;
+  font-family: var(--font);
+  transition: background 0.12s;
+}
+.bill-result-clear:hover { background: rgba(43, 181, 160, 0.12); }
