@@ -50,31 +50,57 @@
 
             <p class="calc-address" id="calcAddress"></p>
 
-            <label class="field">
-              <span class="field-label-row">
-                <span>Monthly electricity bill</span>
-                <span style="text-align:right"><strong id="billDisplay">$150</strong><br><span id="billKwhDisplay" style="font-size:0.78rem;color:var(--muted);font-weight:400"></span></span>
-              </span>
-              <input type="range" id="billSlider" class="slider" min="50" max="600" step="10" value="150" />
-              <div class="tick-marks">
-                <span>$50</span><span>$200</span><span>$400</span><span>$600</span>
-              </div>
-            </label>
+            <div class="toggle-group bill-source-toggle">
+              <button type="button" class="toggle-btn active" id="btnEstimate">Estimate</button>
+              <button type="button" class="toggle-btn" id="btnMyBill">Use my bill</button>
+            </div>
 
-            <p class="card-section-head" style="margin-top:20px">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
-              Payment options
-            </p>
+            <div id="estimateMode">
+              <label class="field">
+                <span class="field-label-row">
+                  <span>Monthly electricity bill</span>
+                  <span style="text-align:right"><strong id="billDisplay">$150</strong><br><span id="billKwhDisplay" style="font-size:0.78rem;color:var(--muted);font-weight:400"></span></span>
+                </span>
+                <input type="range" id="billSlider" class="slider" min="50" max="600" step="10" value="150" />
+                <div class="tick-marks">
+                  <span>$50</span><span>$200</span><span>$400</span><span>$600</span>
+                </div>
+              </label>
+            </div>
+
+            <div id="myBillMode" hidden>
+              <input type="file" id="billFileInput" accept=".pdf" hidden>
+              <div id="billDropZone" class="bill-drop-zone">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                <p class="bill-drop-title">Drop your bill PDF here</p>
+                <p class="bill-drop-sub">or <button type="button" id="billBrowseBtn" class="bill-browse-link">browse to upload</button></p>
+                <p class="bill-drop-hint">Austin Energy PDF bills · reads tables and charts</p>
+                <p id="billDropError" class="bill-drop-error" hidden></p>
+              </div>
+              <div id="billUploadProgress" class="bill-upload-progress" hidden>
+                <span id="billUploadStatus"></span>
+              </div>
+              <div id="billResult" class="bill-result" hidden>
+                <div class="bill-result-stats">
+                  <div class="bill-result-stat">
+                    <span class="bill-result-label">Avg monthly usage</span>
+                    <strong class="bill-result-val" id="billResultKwh">—</strong>
+                  </div>
+                  <div class="bill-result-stat">
+                    <span class="bill-result-label">Avg monthly bill</span>
+                    <strong class="bill-result-val" id="billResultBill">—</strong>
+                  </div>
+                </div>
+                <p class="bill-result-range" id="billResultRange"></p>
+                <button type="button" class="bill-result-clear" id="billResultClear">Upload a different bill</button>
+              </div>
+            </div>
+
+            <p class="card-section-head" style="margin-top:20px">Payment options</p>
 
             <div class="toggle-group">
-              <button type="button" class="toggle-btn active" id="btnCash">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-                Cash
-              </button>
-              <button type="button" class="toggle-btn" id="btnFinancing">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/></svg>
-                Financing
-              </button>
+              <button type="button" class="toggle-btn active" id="btnCash">Cash</button>
+              <button type="button" class="toggle-btn" id="btnFinancing">Financing</button>
             </div>
 
             <div class="slider-group">
@@ -119,25 +145,22 @@
           <!-- Results -->
           <div id="results" hidden>
 
-            <div class="good-news-banner">
-              <p class="banner-label">Good news, you have a great solar potential!</p>
-              <div class="banner-cards">
-                <div class="banner-stat">
-                  <span class="banner-stat-label">30 year savings</span>
-                  <span class="banner-stat-value" id="stat20yrSavings">—</span>
-                </div>
-                <div class="banner-stat">
-                  <span class="banner-stat-label">Average bill change</span>
-                  <span class="banner-stat-value"><span id="statBillBefore">—</span> → <span id="statBillAfter" class="stat-green">—</span></span>
-                </div>
-                <div class="banner-stat">
-                  <span class="banner-stat-label">Energy covered by solar</span>
-                  <span class="banner-stat-value" id="coverageLabel">—</span>
-                </div>
-                <div class="banner-stat">
-                  <span class="banner-stat-label">Payback period</span>
-                  <span class="banner-stat-value" id="sysPayback">—</span>
-                </div>
+            <div class="banner-cards">
+              <div class="banner-stat">
+                <span class="banner-stat-label">30 year savings</span>
+                <span class="banner-stat-value" id="stat20yrSavings">—</span>
+              </div>
+              <div class="banner-stat">
+                <span class="banner-stat-label">Average bill change</span>
+                <span class="banner-stat-value"><span id="statBillBefore">—</span> → <span id="statBillAfter" class="stat-green">—</span></span>
+              </div>
+              <div class="banner-stat">
+                <span class="banner-stat-label">Energy covered by solar</span>
+                <span class="banner-stat-value" id="coverageLabel">—</span>
+              </div>
+              <div class="banner-stat">
+                <span class="banner-stat-label">Payback period</span>
+                <span class="banner-stat-value" id="sysPayback">—</span>
               </div>
             </div>
 
